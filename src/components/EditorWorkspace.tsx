@@ -62,6 +62,8 @@ interface BlockInputProps {
   onFocus: () => void;
   isActive: boolean;
   existingCharacters?: string[];
+  characters?: any[];
+  locations?: any[];
 }
 
 const BlockInput: React.FC<BlockInputProps> = ({
@@ -74,9 +76,15 @@ const BlockInput: React.FC<BlockInputProps> = ({
   onKeyDown,
   onFocus,
   isActive,
-  existingCharacters = []
+  existingCharacters = [],
+  characters = [],
+  locations = []
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cursorIndex, setCursorIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const adjustHeight = () => {
     const textarea = textareaRef.current;
@@ -127,17 +135,161 @@ const BlockInput: React.FC<BlockInputProps> = ({
     }
   }, [isActive]);
 
+  // Combined character list
+  const combinedCharacters = useMemo(() => {
+    const bibleNames = (characters || []).map(c => c.name.trim().toUpperCase());
+    return Array.from(new Set([...existingCharacters, ...bibleNames]));
+  }, [existingCharacters, characters]);
+
   // Compute character suggestion suffix
   let suggestionSuffix = '';
   if (type === 'character' && text.trim().length > 0) {
     const upperText = text.toUpperCase();
-    const match = existingCharacters.find(
+    const match = combinedCharacters.find(
       char => char.startsWith(upperText) && char.length > upperText.length
     );
     if (match) {
       suggestionSuffix = match.slice(upperText.length);
     }
   }
+
+  // Create unified autocomplete choices from story planner context
+  const allContextItems = useMemo(() => {
+    const list: any[] = [];
+    
+    characters.forEach(c => {
+      list.push({
+        id: `char-${c.id}`,
+        type: 'character',
+        label: c.name,
+        subLabel: c.role ? `${c.role} • ${c.traits || 'No traits listed'}` : 'Character',
+        insertText: c.name
+      });
+    });
+
+    locations.forEach(l => {
+      list.push({
+        id: `loc-${l.id}`,
+        type: 'location',
+        label: l.name,
+        subLabel: l.timeOfDay ? `${l.timeOfDay} • ${l.description || 'No description'}` : l.description || 'Location',
+        insertText: l.name
+      });
+    });
+
+    return list;
+  }, [characters, locations]);
+
+  const filteredItems = useMemo(() => {
+    if (!showPopup) return [];
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return allContextItems.slice(0, 12);
+    return allContextItems
+      .filter(item => 
+        item.label.toLowerCase().includes(query) || 
+        item.subLabel.toLowerCase().includes(query)
+      )
+      .slice(0, 12);
+  }, [showPopup, searchQuery, allContextItems]);
+
+  const handleSelectOption = (item: any) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const textBeforeAt = text.slice(0, cursorIndex);
+    const textAfterCursor = text.slice(textarea.selectionStart);
+
+    let insertVal = item.insertText;
+    if (item.type === 'character' || item.type === 'location') {
+      insertVal = insertVal.toUpperCase();
+    }
+
+    const newText = textBeforeAt + insertVal + textAfterCursor;
+    onChange(newText);
+    setShowPopup(false);
+
+    setTimeout(() => {
+      if (textarea) {
+        textarea.focus();
+        const newCursorPos = cursorIndex + insertVal.length;
+        textarea.selectionStart = newCursorPos;
+        textarea.selectionEnd = newCursorPos;
+        adjustHeight();
+      }
+    }, 10);
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    onChange(val);
+    adjustHeight();
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const selStart = textarea.selectionStart;
+    const textBeforeCursor = val.slice(0, selStart);
+
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    if (atIndex !== -1) {
+      const textSinceAt = textBeforeCursor.slice(atIndex + 1);
+      if (!textSinceAt.includes(' ')) {
+        setShowPopup(true);
+        setSearchQuery(textSinceAt);
+        setCursorIndex(atIndex);
+        setSelectedIndex(0);
+        return;
+      }
+    }
+
+    setShowPopup(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showPopup && filteredItems.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % filteredItems.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + filteredItems.length) % filteredItems.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        handleSelectOption(filteredItems[selectedIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowPopup(false);
+        return;
+      }
+    }
+
+    if (suggestionSuffix && e.key === 'Enter') {
+      e.preventDefault();
+      const completedText = text + suggestionSuffix;
+      e.currentTarget.value = completedText;
+      e.currentTarget.selectionStart = completedText.length;
+      e.currentTarget.selectionEnd = completedText.length;
+      onChange(completedText);
+      setTimeout(() => {
+        adjustHeight();
+      }, 0);
+      onKeyDown(e);
+      return;
+    }
+
+    onKeyDown(e);
+  };
+
+  const handleBlur = () => {
+    setTimeout(() => {
+      setShowPopup(false);
+    }, 200);
+  };
 
   return (
     <div className="relative w-full">
@@ -159,32 +311,63 @@ const BlockInput: React.FC<BlockInputProps> = ({
         id={`textarea-${id}`}
         ref={textareaRef}
         value={text}
-        onChange={(e) => {
-          onChange(e.target.value);
-          adjustHeight();
-        }}
-        onKeyDown={(e) => {
-          if (suggestionSuffix && e.key === 'Enter') {
-            e.preventDefault();
-            const completedText = text + suggestionSuffix;
-            e.currentTarget.value = completedText;
-            e.currentTarget.selectionStart = completedText.length;
-            e.currentTarget.selectionEnd = completedText.length;
-            onChange(completedText);
-            setTimeout(() => {
-              adjustHeight();
-            }, 0);
-            onKeyDown(e);
-            return;
-          }
-          onKeyDown(e);
-        }}
+        onChange={handleTextareaChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         onFocus={onFocus}
         placeholder={placeholder}
         rows={1}
         className={`${className} overflow-hidden resize-none bg-transparent border-0 outline-none focus:outline-none focus:ring-0 p-0 m-0 w-full block font-mono text-[13px] relative z-10`}
         style={{ minHeight: '1.5em' }}
       />
+
+      {/* Autocomplete Popup */}
+      {showPopup && filteredItems.length > 0 && (
+        <div className="absolute z-50 left-0 mt-1 max-h-60 w-80 overflow-y-auto rounded-lg border border-[#E5E5E1] bg-white p-1.5 shadow-lg font-sans text-xs animate-fade-in select-none">
+          <div className="px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-[#718096] border-b border-[#F1F1F1] mb-1 flex items-center justify-between">
+            <span>Story Context Bible</span>
+            <span className="text-[8px] text-[#A0AEC0] normal-case tracking-normal">⇅ to navigate • ↵ to insert</span>
+          </div>
+          {filteredItems.map((item, idx) => (
+            <button
+              key={item.id}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevent text area from losing focus/blurring prematurely
+                handleSelectOption(item);
+              }}
+              onMouseEnter={() => setSelectedIndex(idx)}
+              className={`w-full flex items-start gap-2.5 px-2.5 py-2 rounded text-left transition-all cursor-pointer ${
+                idx === selectedIndex 
+                  ? 'bg-[#1A1A1A] text-white' 
+                  : 'text-[#2D2D2A] hover:bg-[#FAFAFA]'
+              }`}
+            >
+              <div className={`p-1 rounded shrink-0 ${idx === selectedIndex ? 'bg-white/20 text-white' : 'bg-stone-100 text-[#718096]'}`}>
+                {item.type === 'character' && <User className="w-3.5 h-3.5" />}
+                {item.type === 'location' && <MapPin className="w-3.5 h-3.5" />}
+              </div>
+              <div className="min-w-0 flex-grow">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-semibold truncate">{item.label}</span>
+                  <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.2 rounded shrink-0 ${
+                    idx === selectedIndex 
+                      ? 'bg-white/15 text-stone-300' 
+                      : 'bg-[#FAFAFA] border border-[#E5E5E1] text-[#718096]'
+                  }`}>
+                    {item.type}
+                  </span>
+                </div>
+                {item.subLabel && (
+                  <p className={`text-[10px] truncate ${idx === selectedIndex ? 'text-stone-300 font-light' : 'text-[#718096] font-light'}`}>
+                    {item.subLabel}
+                  </p>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -386,6 +569,9 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
   const lastHtmlRef = useRef<string>('');
   const shareExportDropdownRef = useRef<HTMLDivElement>(null);
   const isUnmountingRef = useRef(false);
+  const scriptScrollPositionsRef = useRef<Record<string, number>>({});
+  const storyboardScrollPositionsRef = useRef<Record<string, number>>({});
+  const brainstormScrollPositionsRef = useRef<Record<string, number>>({});
 
   // Filter script blocks to those belonging to the active scene, sorted by scene order in full script view
   const filteredBlocks = useMemo(() => {
@@ -591,6 +777,63 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
       }
     };
   }, [projectId, showNameModal]);
+
+  // Effect to save/restore scroll positions of the active scene when switching scenes or view modes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (viewMode === 'script' && !isFullScriptView) {
+        const viewport = document.getElementById('script-viewport');
+        if (viewport) {
+          const savedPos = scriptScrollPositionsRef.current[activeSceneId] || 0;
+          viewport.scrollTop = savedPos;
+        }
+      } else if (viewMode === 'storyboard') {
+        const viewport = document.getElementById('storyboard-viewport');
+        if (viewport) {
+          const savedPos = storyboardScrollPositionsRef.current[activeSceneId] || 0;
+          viewport.scrollTop = savedPos;
+        }
+      }
+    }, 50);
+
+    return () => {
+      clearTimeout(timer);
+      if (viewMode === 'script' && !isFullScriptView) {
+        const viewport = document.getElementById('script-viewport');
+        if (viewport) {
+          scriptScrollPositionsRef.current[activeSceneId] = viewport.scrollTop;
+        }
+      } else if (viewMode === 'storyboard') {
+        const viewport = document.getElementById('storyboard-viewport');
+        if (viewport) {
+          storyboardScrollPositionsRef.current[activeSceneId] = viewport.scrollTop;
+        }
+      }
+    };
+  }, [activeSceneId, viewMode, isFullScriptView]);
+
+  // Effect to save/restore scroll positions of individual brainstorm tabs
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (viewMode === 'brainstorm') {
+        const viewport = document.getElementById('brainstorm-viewport');
+        if (viewport) {
+          const savedPos = brainstormScrollPositionsRef.current[brainstormTab] || 0;
+          viewport.scrollTop = savedPos;
+        }
+      }
+    }, 50);
+
+    return () => {
+      clearTimeout(timer);
+      if (viewMode === 'brainstorm') {
+        const viewport = document.getElementById('brainstorm-viewport');
+        if (viewport) {
+          brainstormScrollPositionsRef.current[brainstormTab] = viewport.scrollTop;
+        }
+      }
+    };
+  }, [brainstormTab, viewMode]);
 
   const handleSaveName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1562,6 +1805,49 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
     return map;
   }, [scenes]);
 
+  const handleActClick = (actId: string) => {
+    const actScenes = scenesByAct[actId] || [];
+    if (actScenes.length > 0) {
+      const firstScene = actScenes[0];
+      setActiveSceneId(firstScene.id);
+      if (isFullScriptView && viewMode === 'script') {
+        setTimeout(() => {
+          const firstBlock = document.querySelector(`[data-scene-id="${firstScene.id}"]`);
+          const viewport = document.getElementById('script-viewport');
+          if (firstBlock && viewport) {
+            viewport.scrollTo({
+              top: (firstBlock as HTMLElement).offsetTop - 120,
+              behavior: 'smooth'
+            });
+          }
+        }, 50);
+      } else {
+        setIsFullScriptView(false);
+      }
+    }
+  };
+
+  const handleUnassignedHeaderClick = () => {
+    if (unassignedScenes.length > 0) {
+      const firstScene = unassignedScenes[0];
+      setActiveSceneId(firstScene.id);
+      if (isFullScriptView && viewMode === 'script') {
+        setTimeout(() => {
+          const firstBlock = document.querySelector(`[data-scene-id="${firstScene.id}"]`);
+          const viewport = document.getElementById('script-viewport');
+          if (firstBlock && viewport) {
+            viewport.scrollTo({
+              top: (firstBlock as HTMLElement).offsetTop - 120,
+              behavior: 'smooth'
+            });
+          }
+        }, 50);
+      } else {
+        setIsFullScriptView(false);
+      }
+    }
+  };
+
   const renderSceneItem = (scene: Scene, currentActId: string | undefined) => {
     const globalNumber = sceneGlobalIndexMap[scene.id] || 1;
     const padNumber = globalNumber.toString().padStart(2, '0');
@@ -1577,7 +1863,20 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
         key={scene.id}
         onClick={() => {
           setActiveSceneId(scene.id);
-          setIsFullScriptView(false);
+          if (isFullScriptView && viewMode === 'script') {
+            setTimeout(() => {
+              const firstBlock = document.querySelector(`[data-scene-id="${scene.id}"]`);
+              const viewport = document.getElementById('script-viewport');
+              if (firstBlock && viewport) {
+                viewport.scrollTo({
+                  top: (firstBlock as HTMLElement).offsetTop - 120,
+                  behavior: 'smooth'
+                });
+              }
+            }, 50);
+          } else {
+            setIsFullScriptView(false);
+          }
         }}
         draggable
         onDragStart={(e) => {
@@ -1958,7 +2257,11 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                   }`}
                 >
                   {acts.length > 0 && (
-                    <div className="px-2 py-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#A0AEC0]">
+                    <div 
+                      onClick={handleUnassignedHeaderClick}
+                      className="px-2 py-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#A0AEC0] hover:text-[#1A1A1A] hover:bg-[#E5E5E1]/20 rounded cursor-pointer transition-colors"
+                      title="Click to view first unassigned scene"
+                    >
                       <span>Unassigned Scenes</span>
                       <span className="bg-[#E5E5E1] text-[#718096] rounded-full px-1.5 py-0.2 font-mono text-[9px]">{unassignedScenes.length}</span>
                     </div>
@@ -2012,7 +2315,8 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                         setDraggedId(null);
                         setDragOverId(null);
                       }}
-                      className={`group relative flex items-center justify-between p-2 rounded bg-[#EFEFEA] hover:bg-[#E7E7E0] border transition-all gap-1 ${
+                      onClick={() => handleActClick(act.id)}
+                      className={`group relative flex items-center justify-between p-2 rounded bg-[#EFEFEA] hover:bg-[#E7E7E0] border transition-all gap-1 cursor-pointer ${
                         dragOverId === act.id 
                           ? 'border-2 border-dashed border-indigo-500 bg-indigo-50/50 shadow-xs' 
                           : 'border-[#E1E1DC]'
@@ -2020,7 +2324,10 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                     >
                       <div className="flex items-center gap-1.5 flex-grow min-w-0">
                         <button
-                          onClick={() => setCollapsedActs(prev => ({ ...prev, [act.id]: !prev[act.id] }))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCollapsedActs(prev => ({ ...prev, [act.id]: !prev[act.id] }));
+                          }}
                           className="text-[#718096] hover:text-[#1A1A1A] transition-colors shrink-0"
                         >
                           {isCollapsed ? (
@@ -2041,14 +2348,14 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                       {/* Controls on Hover */}
                       <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
                         <button
-                          onClick={() => handleAddScene(act.id)}
+                          onClick={(e) => { e.stopPropagation(); handleAddScene(act.id); }}
                           className="p-0.5 hover:bg-white/60 text-[#718096] hover:text-[#1A1A1A] rounded"
                           title="Add Scene to this Act"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleMoveAct(act.id, 'up')}
+                          onClick={(e) => { e.stopPropagation(); handleMoveAct(act.id, 'up'); }}
                           disabled={actIndex === 0}
                           className="p-0.5 hover:bg-white/60 text-[#718096] hover:text-[#1A1A1A] rounded disabled:opacity-30"
                           title="Move Act Up"
@@ -2056,7 +2363,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                           <ChevronUp className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleMoveAct(act.id, 'down')}
+                          onClick={(e) => { e.stopPropagation(); handleMoveAct(act.id, 'down'); }}
                           disabled={actIndex === acts.length - 1}
                           className="p-0.5 hover:bg-white/60 text-[#718096] hover:text-[#1A1A1A] rounded disabled:opacity-30"
                           title="Move Act Down"
@@ -2064,7 +2371,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                           <ChevronDown className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDeleteAct(act.id)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAct(act.id); }}
                           className="p-0.5 hover:bg-white/60 text-[#718096] hover:text-red-600 rounded"
                           title="Delete Act Folder (Scenes are kept)"
                         >
@@ -2245,7 +2552,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                         : '';
 
                       return (
-                        <div key={block.id} className={`${opacityClass} ${selectedBgClass} relative w-full group/block flex items-start gap-2`}>
+                        <div key={block.id} id={`block-${block.id}`} data-scene-id={block.sceneId} className={`${opacityClass} ${selectedBgClass} relative w-full group/block flex items-start gap-2`}>
                           {/* Multi-selection Checkbox */}
                           <button
                             type="button"
@@ -2309,6 +2616,8 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                               onFocus={() => setActiveBlockId(block.id)}
                               isActive={activeBlockId === block.id}
                               existingCharacters={existingCharacters}
+                              characters={brainstormData.charactersList || []}
+                              locations={brainstormData.locationsList || []}
                             />
                           </div>
                         </div>
@@ -2603,7 +2912,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                 </div>
 
                 {/* Sub-tab Content Work Area */}
-                <div className="flex-grow overflow-y-auto p-6 relative">
+                <div className="flex-grow overflow-y-auto p-6 relative" id="brainstorm-viewport">
                 {/* 1. BIBLE RECAP OVERVIEW TAB */}
                 {brainstormTab === 'recap' && (
                   <div className="max-w-5xl mx-auto space-y-6">
