@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Courier Prime", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  background-color: #F7F7F5;
+  color: #2D2D2A;
+  font-family: var(--font-sans);
+}
+
+/* ContentEditable empty placeholder support */
+[contenteditable] [data-block-type]:empty::before {
+  content: attr(placeholder);
+  color: #CBD5E0;
+  cursor: text;
+  pointer-events: none;
+  display: inline-block;
+}

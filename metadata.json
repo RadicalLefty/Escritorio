@@ -1,0 +1,6 @@
+{
+  "name": "Collaborative Script and Storyboard Studio",
+  "description": "A secure, real-time coworking platform for screenplay writing, interactive storyboarding, and character sketching with local encrypted storage and PDF exports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
