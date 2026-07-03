@@ -203,6 +203,7 @@ async function startServer() {
         if (msg.type === 'join') {
           joinedProjectId = msg.projectId;
           const name = msg.name || `Writer ${Math.floor(100 + Math.random() * 900)}`;
+          const userId = msg.userId;
           
           // Random collaborator color
           const colors = ['#E11D48', '#2563EB', '#16A34A', '#D97706', '#7C3AED', '#0891B2', '#EC4899'];
@@ -212,21 +213,51 @@ async function startServer() {
           if (!room) {
             // Load from SQLite database
             console.log(`Loading project ${joinedProjectId} from SQLite database...`);
-            const data = await getProjectData(joinedProjectId);
-            room = {
-              scenes: data.scenes,
-              scriptBlocks: data.scriptBlocks,
-              storyboardFrames: data.storyboardFrames,
-              sketches: data.sketches,
-              collaborators: new Map(),
-              clients: new Map(),
-              saveTimeout: null
-            };
-            activeRooms.set(joinedProjectId, room);
+            try {
+              const data = await getProjectData(joinedProjectId);
+              room = {
+                scenes: data.scenes,
+                scriptBlocks: data.scriptBlocks,
+                storyboardFrames: data.storyboardFrames,
+                sketches: data.sketches,
+                collaborators: new Map(),
+                clients: new Map(),
+                saveTimeout: null
+              };
+              activeRooms.set(joinedProjectId, room);
+            } catch (dbErr: any) {
+              console.error(`Error loading project ${joinedProjectId}:`, dbErr);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: dbErr.message || 'Project not found'
+              }));
+              return;
+            }
+          } else if (userId) {
+            // Evict any existing connection for this same userId in the room
+            let existingClientId: string | null = null;
+            room.collaborators.forEach((collab, cid) => {
+              if (collab.userId === userId) {
+                existingClientId = cid;
+              }
+            });
+
+            if (existingClientId) {
+              console.log(`Evicting old connection ${existingClientId} for user ${name} (${userId})`);
+              const oldWs = room.clients.get(existingClientId);
+              if (oldWs && oldWs.readyState === WebSocket.OPEN) {
+                try {
+                  oldWs.close();
+                } catch (e) {}
+              }
+              room.collaborators.delete(existingClientId);
+              room.clients.delete(existingClientId);
+            }
           }
 
           const collaborator: Collaborator = {
             id: clientId,
+            userId,
             name,
             color: randomColor
           };

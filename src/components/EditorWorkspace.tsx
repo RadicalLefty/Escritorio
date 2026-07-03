@@ -336,6 +336,8 @@ interface EditorWorkspaceProps {
 export default function EditorWorkspace({ projectId, projectName, onBack }: EditorWorkspaceProps) {
   // Connection states
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [userName, setUserName] = useState('');
   const [showNameModal, setShowNameModal] = useState(true);
@@ -383,6 +385,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
   const editorRef = useRef<HTMLDivElement>(null);
   const lastHtmlRef = useRef<string>('');
   const shareExportDropdownRef = useRef<HTMLDivElement>(null);
+  const isUnmountingRef = useRef(false);
 
   // Filter script blocks to those belonging to the active scene, sorted by scene order in full script view
   const filteredBlocks = useMemo(() => {
@@ -445,6 +448,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
     }
 
     setConnectionStatus('connecting');
+    setInitialSyncDone(false);
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
     
@@ -453,11 +457,20 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
 
     socket.onopen = () => {
       setConnectionStatus('connected');
+      
+      // Get or generate persistent userId
+      let savedUid = localStorage.getItem('coscript_user_id');
+      if (!savedUid) {
+        savedUid = `user-${crypto.randomUUID()}`;
+        localStorage.setItem('coscript_user_id', savedUid);
+      }
+
       // Send join event
       const joinMsg: WSMessage = {
         type: 'join',
         projectId,
-        name: usernameToUse
+        name: usernameToUse,
+        userId: savedUid
       };
       socket.send(JSON.stringify(joinMsg));
     };
@@ -471,11 +484,16 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
             setCollaborators(msg.collaborators);
             break;
 
+          case 'error':
+            setError(msg.message);
+            break;
+
           case 'sync-full':
             setScenes(msg.data.scenes);
             setScriptBlocks(msg.data.scriptBlocks);
             setStoryboardFrames(msg.data.storyboardFrames);
             setSketches(msg.data.sketches);
+            setInitialSyncDone(true);
             
             // Set default active values if empty
             if (msg.data.scenes.length > 0 && !msg.data.scenes.some(s => s.id === activeSceneId)) {
@@ -544,8 +562,11 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
 
     socket.onclose = () => {
       setConnectionStatus('disconnected');
+      if (isUnmountingRef.current) return;
+      
       // Auto-reconnect with backing-off exponential timers
       reconnectTimeoutRef.current = setTimeout(() => {
+        if (isUnmountingRef.current) return;
         connectWebSocket(usernameToUse);
       }, 4000);
     };
@@ -556,10 +577,12 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
   };
 
   useEffect(() => {
+    isUnmountingRef.current = false;
     if (!showNameModal && userName) {
       connectWebSocket(userName);
     }
     return () => {
+      isUnmountingRef.current = true;
       if (socketRef.current) {
         socketRef.current.close();
       }
@@ -1053,7 +1076,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
 
   // Auto-initialize a default scene heading script block when a scene has no blocks
   useEffect(() => {
-    if (activeSceneId && filteredBlocks.length === 0 && connectionStatus === 'connected') {
+    if (initialSyncDone && activeSceneId && filteredBlocks.length === 0 && connectionStatus === 'connected') {
       const newId = `block-${crypto.randomUUID()}`;
       const newBlock: ScriptBlock = {
         id: newId,
@@ -1065,7 +1088,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
       setScriptBlocks(updated);
       emitMessage({ type: 'script-update', scriptBlocks: updated });
     }
-  }, [activeSceneId, filteredBlocks.length, connectionStatus]);
+  }, [initialSyncDone, activeSceneId, filteredBlocks.length, connectionStatus]);
 
   // Storyboard Frame Operations
   const handleAddStoryboardFrame = () => {
@@ -1690,6 +1713,24 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
         </div>
       )}
 
+      {/* Error Modal */}
+      {error && (
+        <div className="fixed inset-0 bg-[#1A1A1A]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded max-w-sm w-full p-6 border border-[#E5E5E1] shadow-md text-center">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-2">Project Not Found</h2>
+            <p className="text-xs text-[#718096] mb-5 font-light leading-relaxed">
+              This screenplay project may have been deleted, or the shared workspace link is invalid.
+            </p>
+            <button
+              onClick={onBack}
+              className="w-full bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded py-2.5 text-sm font-medium transition-colors cursor-pointer"
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Workspace Header */}
       <header className="relative bg-white border-b border-[#E5E5E1] h-14 shrink-0 flex items-center justify-between px-4 z-30">
         <div className="flex items-center gap-3">
@@ -2152,6 +2193,13 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
                 )}
 
                 <div className="bg-white max-w-2xl w-full min-h-[500px] lg:min-h-[calc(100vh-240px)] shadow-sm rounded border border-[#E5E5E1] p-6 sm:p-10 md:p-16 pb-12 sm:pb-20 md:pb-24 font-mono text-[13px] leading-relaxed relative flex flex-col transition-all duration-200 shrink-0">
+                  {connectionStatus !== 'connected' && (
+                    <div className="absolute top-3 left-3 right-3 bg-amber-50 border border-amber-200 rounded px-4 py-2.5 text-center text-amber-800 text-xs font-sans flex items-center justify-center gap-2 select-none z-10">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                      <span><strong>Disconnected</strong> — Reconnecting... Any local edits will sync once connection is restored.</span>
+                    </div>
+                  )}
+
                   <p className="text-center text-[#A0AEC0] text-[10px] uppercase tracking-widest font-sans mb-8">
                     {projectName} — {isFullScriptView ? 'FULL PLAY' : (activeScene?.title || '')}
                   </p>

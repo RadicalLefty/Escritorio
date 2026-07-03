@@ -107,13 +107,14 @@ export interface Project {
 
 export interface Collaborator {
   id: string;
+  userId?: string;
   name: string;
   color: string;
   activeSceneId?: string;
 }
 
 export type WSMessage =
-  | { type: 'join'; projectId: string; name: string }
+  | { type: 'join'; projectId: string; name: string; userId?: string }
   | { type: 'presence'; collaborators: Collaborator[] }
   | { type: 'sync-full'; data: { scenes: Scene[]; scriptBlocks: ScriptBlock[]; storyboardFrames: StoryboardFrame[]; sketches: Sketch[] } }
   | { type: 'script-update'; scriptBlocks: ScriptBlock[] }
@@ -121,4 +122,5 @@ export type WSMessage =
   | { type: 'storyboard-update'; storyboardFrames: StoryboardFrame[] }
   | { type: 'sketches-update'; sketches: Sketch[] }
   | { type: 'draw-stroke'; target: 'storyboard' | 'sketch'; id: string; stroke: DrawingStroke }
-  | { type: 'draw-clear'; target: 'storyboard' | 'sketch'; id: string };
+  | { type: 'draw-clear'; target: 'storyboard' | 'sketch'; id: string }
+  | { type: 'error'; message: string };
