@@ -33,6 +33,7 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
   const [newSeedlingCategory, setNewSeedlingCategory] = useState('character');
   const [newSeedlingContent, setNewSeedlingContent] = useState('');
   const [seedlingSort, setSeedlingSort] = useState('all');
+  const [showSeedlingAddModal, setShowSeedlingAddModal] = useState(false);
 
   // Fetch projects from DB
   const fetchData = async () => {
@@ -317,48 +318,76 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
                 </h2>
                 <p className="text-[11px] text-[#718096] mt-1">Jot down characters, locations, or plots to inspire your next script.</p>
               </div>
-              <button 
-                onClick={handleCreateRandomFromSeedling}
-                disabled={seedlings.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F1F1] hover:bg-[#E5E5E1] text-[#2D2D2A] text-xs font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                title="Start a new script from a random seedling"
-              >
-                <Shuffle className="w-3.5 h-3.5" />
-                Random Idea
-              </button>
             </div>
             
             <div className="p-4 bg-[#FAFAFA] border-b border-[#E5E5E1]">
-              <form onSubmit={handleCreateSeedling} className="flex flex-col sm:flex-row gap-3">
-                <select
-                  value={newSeedlingCategory}
-                  onChange={(e) => setNewSeedlingCategory(e.target.value)}
-                  className="bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] w-full sm:w-1/3"
-                >
-                  <option value="character">Character</option>
-                  <option value="location">Location</option>
-                  <option value="situation">Situation</option>
-                  <option value="world">World Building</option>
-                  <option value="dialogue">Dialogue</option>
-                  <option value="other">Other</option>
-                </select>
-                <div className="flex-grow flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="E.g., A detective who is afraid of the dark..."
-                    value={newSeedlingContent}
-                    onChange={(e) => setNewSeedlingContent(e.target.value)}
-                    className="flex-grow bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A]"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded px-4 py-2 text-sm font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              {!showSeedlingAddModal ? (
+                <div className="flex gap-2 justify-end">
+                  <button 
+                    onClick={() => setShowSeedlingAddModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white text-xs font-semibold rounded transition-colors shadow-sm cursor-pointer"
                   >
-                    Add
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Idea
+                  </button>
+                  <button 
+                    onClick={handleCreateRandomFromSeedling}
+                    disabled={seedlings.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F1F1] hover:bg-[#E5E5E1] text-[#2D2D2A] text-xs font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+                    title="Start a new script from a random seedling"
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                    Start from Random
                   </button>
                 </div>
-              </form>
+              ) : (
+                <form onSubmit={(e) => {
+                  handleCreateSeedling(e);
+                  if (newSeedlingContent.trim()) setShowSeedlingAddModal(false);
+                }} className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Category</label>
+                    <select
+                      value={newSeedlingCategory}
+                      onChange={(e) => setNewSeedlingCategory(e.target.value)}
+                      className="bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] w-full cursor-pointer"
+                    >
+                      <option value="character">Character</option>
+                      <option value="location">Location</option>
+                      <option value="situation">Situation</option>
+                      <option value="world">World Building</option>
+                      <option value="dialogue">Dialogue</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Details</label>
+                    <textarea
+                      required
+                      placeholder="E.g., A detective who is afraid of the dark..."
+                      value={newSeedlingContent}
+                      onChange={(e) => setNewSeedlingContent(e.target.value)}
+                      className="w-full bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] min-h-[100px] resize-y"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSeedlingAddModal(false)}
+                      className="px-4 py-2 bg-white border border-[#E5E5E1] hover:bg-[#FAFAFA] text-[#718096] text-xs font-bold rounded transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!newSeedlingContent.trim()}
+                      className="bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded px-4 py-2 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      Save Idea
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
             
             <div className="p-4 border-b border-[#E5E5E1] bg-white flex gap-2 overflow-x-auto no-scrollbar">

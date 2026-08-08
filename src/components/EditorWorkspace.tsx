@@ -561,6 +561,81 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
   const [showSeedlingsPanel, setShowSeedlingsPanel] = useState(false);
   const [seedlings, setSeedlings] = useState<any[]>([]);
   const [seedlingSort, setSeedlingSort] = useState('all');
+  const [showSeedlingAddModal, setShowSeedlingAddModal] = useState(false);
+  const [newSeedlingCategory, setNewSeedlingCategory] = useState('character');
+  const [newSeedlingContent, setNewSeedlingContent] = useState('');
+
+  const handleAddSeedling = async () => {
+    if (!newSeedlingContent.trim()) return;
+    try {
+      const res = await fetch('/api/seedlings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: newSeedlingCategory, content: newSeedlingContent })
+      });
+      if (res.ok) {
+        const seedling = await res.json();
+        setSeedlings([seedling, ...seedlings]);
+        setShowSeedlingAddModal(false);
+        setNewSeedlingContent('');
+      }
+    } catch (err) {
+      console.error('Failed to add seedling:', err);
+    }
+  };
+
+  const handleInsertRandomIdea = () => {
+    if (seedlings.length === 0) return;
+    const randomSeedling = seedlings[Math.floor(Math.random() * seedlings.length)];
+    const textToInsert = `[Idea: ${randomSeedling.category.toUpperCase()}] ${randomSeedling.content}`;
+
+    if (viewMode === 'script') {
+      const currentBlocks = filteredBlocks;
+      if (currentBlocks.length > 0) {
+        const lastBlock = currentBlocks[currentBlocks.length - 1];
+        handleUpdateAndInsertBlockAfter(lastBlock.id, lastBlock.text, 'action', textToInsert);
+      } else {
+        const newId = `block-${crypto.randomUUID()}`;
+        const newBlock: ScriptBlock = {
+          id: newId,
+          type: 'action',
+          text: textToInsert,
+          sceneId: activeSceneId,
+        };
+        const newBlocks = [...scriptBlocks, newBlock];
+        setScriptBlocks(newBlocks);
+        socketRef.current?.send(JSON.stringify({ type: 'script-update', scriptBlocks: newBlocks }));
+      }
+    } else if (viewMode === 'brainstorm') {
+      if (brainstormTab === 'recap') {
+        const currentText = brainstormData.outline || '';
+        handleUpdateBrainstorm({ outline: currentText ? `${currentText}\n\n${textToInsert}` : textToInsert });
+      } else if (brainstormTab === 'premise') {
+        const currentText = brainstormData.logline || '';
+        handleUpdateBrainstorm({ logline: currentText ? `${currentText}\n\n${textToInsert}` : textToInsert });
+      } else if (brainstormTab === 'acts') {
+        const newList = [...(brainstormData.actsList || [])];
+        if (newList[0]) {
+          newList[0].description = newList[0].description ? `${newList[0].description}\n\n${textToInsert}` : textToInsert;
+          handleUpdateBrainstorm({ actsList: newList });
+        }
+      } else if (brainstormTab === 'characters') {
+        if (selectedCharacterId) {
+          const newList = (brainstormData.charactersList || []).map(c => 
+            c.id === selectedCharacterId ? { ...c, backstory: c.backstory ? `${c.backstory}\n\n${textToInsert}` : textToInsert } : c
+          );
+          handleUpdateBrainstorm({ charactersList: newList });
+        }
+      } else if (brainstormTab === 'locations') {
+        if (selectedLocationId) {
+          const newList = (brainstormData.locationsList || []).map(l => 
+            l.id === selectedLocationId ? { ...l, description: l.description ? `${l.description}\n\n${textToInsert}` : textToInsert } : l
+          );
+          handleUpdateBrainstorm({ locationsList: newList });
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     if (showSeedlingsPanel && seedlings.length === 0) {
@@ -2359,46 +2434,106 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
               </button>
             </div>
             
-            <div className="p-3 border-b border-[#E5E5E1] bg-white flex gap-1.5 overflow-x-auto no-scrollbar">
-               {['all', 'character', 'location', 'situation', 'world', 'dialogue', 'other'].map(cat => (
-                 <button
-                    key={cat}
-                    onClick={() => setSeedlingSort(cat)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors whitespace-nowrap cursor-pointer ${seedlingSort === cat ? 'bg-[#1A1A1A] text-white' : 'bg-[#F1F1F1] text-[#718096] hover:bg-[#E5E5E1]'}`}
-                 >
-                   {cat}
-                 </button>
-               ))}
+            <div className="p-3 border-b border-[#E5E5E1] bg-white flex items-center gap-2">
+              <button 
+                onClick={() => setShowSeedlingAddModal(true)} 
+                className="flex-grow flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white text-xs font-semibold rounded transition-colors cursor-pointer shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Idea</span>
+              </button>
+              <button 
+                onClick={handleInsertRandomIdea} 
+                disabled={seedlings.length === 0}
+                className="flex-grow flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded border border-indigo-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Insert Random</span>
+              </button>
             </div>
 
-            <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-[#F7F7F5]">
-              {seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).length === 0 ? (
-                <div className="text-center py-10 text-[#A0AEC0]">
-                  <Sprout className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-xs font-light">No seedlings found in this category.</p>
+            {showSeedlingAddModal ? (
+              <div className="flex-grow flex flex-col p-4 bg-[#F7F7F5] z-10 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Category</label>
+                  <select 
+                    value={newSeedlingCategory}
+                    onChange={(e) => setNewSeedlingCategory(e.target.value)}
+                    className="w-full bg-white border border-[#E5E5E1] text-[#1A1A1A] text-sm rounded px-3 py-2 focus:outline-none focus:border-[#1A1A1A] cursor-pointer"
+                  >
+                    {['character', 'location', 'situation', 'world', 'dialogue', 'other'].map(cat => (
+                      <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                    ))}
+                  </select>
                 </div>
-              ) : (
-                seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).map(seedling => (
-                  <div key={seedling.id} className="p-3 rounded-lg border border-[#E5E5E1] hover:border-[#CBD5E0] bg-white group relative shadow-xs">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Tag className="w-3 h-3 text-[#A0AEC0]" />
-                      <span className="text-[10px] uppercase font-bold tracking-widest text-[#718096]">{seedling.category}</span>
+                <div className="flex-grow flex flex-col">
+                  <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Details</label>
+                  <textarea
+                    value={newSeedlingContent}
+                    onChange={(e) => setNewSeedlingContent(e.target.value)}
+                    placeholder="Describe your idea seedling..."
+                    className="flex-grow w-full bg-white border border-[#E5E5E1] text-[#1A1A1A] text-sm rounded p-3 resize-none focus:outline-none focus:border-[#1A1A1A]"
+                  />
+                </div>
+                <div className="flex gap-2 shrink-0 pt-2">
+                  <button 
+                    onClick={() => setShowSeedlingAddModal(false)}
+                    className="flex-grow px-3 py-2 bg-white border border-[#E5E5E1] hover:bg-[#FAFAFA] text-[#718096] text-xs font-bold rounded transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleAddSeedling}
+                    disabled={!newSeedlingContent.trim()}
+                    className="flex-grow px-3 py-2 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white text-xs font-bold rounded transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Save Idea
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="p-3 border-b border-[#E5E5E1] bg-white flex gap-1.5 overflow-x-auto no-scrollbar">
+                   {['all', 'character', 'location', 'situation', 'world', 'dialogue', 'other'].map(cat => (
+                     <button
+                        key={cat}
+                        onClick={() => setSeedlingSort(cat)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors whitespace-nowrap cursor-pointer ${seedlingSort === cat ? 'bg-[#1A1A1A] text-white' : 'bg-[#F1F1F1] text-[#718096] hover:bg-[#E5E5E1]'}`}
+                     >
+                       {cat}
+                     </button>                   ))}
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-[#F7F7F5]">
+                  {seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).length === 0 ? (
+                    <div className="text-center py-10 text-[#A0AEC0]">
+                      <Sprout className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-xs font-light">No seedlings found in this category.</p>
                     </div>
-                    <p className="text-xs text-[#1A1A1A] leading-relaxed break-words pr-8">{seedling.content}</p>
-                    
-                    <button
-                      onClick={() => {
-                         navigator.clipboard.writeText(seedling.content);
-                      }}
-                      className="absolute top-2 right-2 p-1.5 text-[#A0AEC0] hover:text-[#1A1A1A] opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded shadow-sm border border-[#E5E5E1] cursor-pointer"
-                      title="Copy to clipboard"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
+                  ) : (
+                    seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).map(seedling => (
+                      <div key={seedling.id} className="p-3 rounded-lg border border-[#E5E5E1] hover:border-[#CBD5E0] bg-white group relative shadow-xs">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Tag className="w-3 h-3 text-[#A0AEC0]" />
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#718096]">{seedling.category}</span>
+                        </div>
+                        <p className="text-xs text-[#1A1A1A] leading-relaxed break-words pr-8">{seedling.content}</p>
+                        
+                        <button
+                          onClick={() => {
+                             navigator.clipboard.writeText(seedling.content);
+                          }}
+                          className="absolute top-2 right-2 p-1.5 text-[#A0AEC0] hover:text-[#1A1A1A] opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded shadow-sm border border-[#E5E5E1] cursor-pointer"
+                          title="Copy to clipboard"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
