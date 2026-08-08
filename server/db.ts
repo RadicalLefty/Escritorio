@@ -59,6 +59,14 @@ async function initPgTables() {
           CONSTRAINT fk_project FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
         )
       `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS seedlings (
+          id VARCHAR(255) PRIMARY KEY,
+          category TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at BIGINT NOT NULL
+        )
+      `);
       console.log('PostgreSQL tables checked/created successfully');
     } finally {
       client.release();
@@ -88,6 +96,14 @@ function initSqliteTables() {
         storyboard_frames TEXT NOT NULL,
         sketches TEXT NOT NULL,
         FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    db!.run(`
+      CREATE TABLE IF NOT EXISTS seedlings (
+        id TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
       )
     `);
   });
@@ -127,7 +143,7 @@ export async function getProjects(): Promise<ProjectRow[]> {
   }
 }
 
-export async function createProject(id: string, name: string): Promise<void> {
+export async function createProject(id: string, name: string, seedlingContent?: string): Promise<void> {
   const encryptedName = encrypt(name);
   const now = Date.now();
   
@@ -143,6 +159,19 @@ export async function createProject(id: string, name: string): Promise<void> {
     { id: 'frame-1', sceneId: 'scene-1', strokes: [], caption: 'Over the shoulder shot of Sarah looking at the screen.', order: 0 }
   ];
   const sketches: Sketch[] = [];
+  
+  if (seedlingContent) {
+    sketches.push({
+      id: 'brainstorm-main',
+      title: 'Story Overview',
+      strokes: [],
+      description: '',
+      updatedAt: now,
+      isBrainstorm: true,
+      outline: seedlingContent,
+      logline: seedlingContent,
+    });
+  }
 
   if (pgPool) {
     const client = await pgPool.connect();
@@ -363,6 +392,20 @@ export async function deleteProject(id: string): Promise<void> {
   }
 }
 
+export async function renameProject(id: string, name: string): Promise<void> {
+  const encryptedName = encrypt(name);
+  const now = Date.now();
+  if (pgPool) {
+    await pgPool.query('UPDATE projects SET name = $1, updated_at = $2 WHERE id = $3', [encryptedName, now, id]);
+  } else {
+    return new Promise((resolve, reject) => {
+      db!.run('UPDATE projects SET name = ?, updated_at = ? WHERE id = ?', [encryptedName, now, id], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+}
 export async function checkDatabaseStatus(): Promise<{ type: 'postgres' | 'sqlite'; status: string; details?: string; error?: string }> {
   if (pgPool) {
     try {
@@ -403,3 +446,68 @@ export async function checkDatabaseStatus(): Promise<{ type: 'postgres' | 'sqlit
   }
 }
 
+export interface SeedlingRow {
+  id: string;
+  category: string;
+  content: string;
+  createdAt: number;
+}
+
+export async function getSeedlings(): Promise<SeedlingRow[]> {
+  if (pgPool) {
+    const result = await pgPool.query('SELECT * FROM seedlings ORDER BY created_at DESC');
+    return result.rows.map((row) => ({
+      id: row.id,
+      category: row.category,
+      content: decrypt(row.content),
+      createdAt: Number(row.created_at),
+    }));
+  } else {
+    return new Promise((resolve, reject) => {
+      db!.all('SELECT * FROM seedlings ORDER BY created_at DESC', (err, rows: any[]) => {
+        if (err) return reject(err);
+        resolve(rows.map((row) => ({
+          id: row.id,
+          category: row.category,
+          content: decrypt(row.content),
+          createdAt: row.created_at
+        })));
+      });
+    });
+  }
+}
+
+export async function createSeedling(id: string, category: string, content: string): Promise<void> {
+  const encryptedContent = encrypt(content);
+  const now = Date.now();
+  if (pgPool) {
+    await pgPool.query(
+      'INSERT INTO seedlings (id, category, content, created_at) VALUES ($1, $2, $3, $4)',
+      [id, category, encryptedContent, now]
+    );
+  } else {
+    return new Promise((resolve, reject) => {
+      db!.run(
+        'INSERT INTO seedlings (id, category, content, created_at) VALUES (?, ?, ?, ?)',
+        [id, category, encryptedContent, now],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+}
+
+export async function deleteSeedling(id: string): Promise<void> {
+  if (pgPool) {
+    await pgPool.query('DELETE FROM seedlings WHERE id = $1', [id]);
+  } else {
+    return new Promise((resolve, reject) => {
+      db!.run('DELETE FROM seedlings WHERE id = ?', [id], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+}

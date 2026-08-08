@@ -96,6 +96,12 @@ export interface Sketch {
   act4Notes?: string;
   charactersList?: BrainstormCharacter[];
   locationsList?: BrainstormLocation[];
+
+  // Optional Podcast fields
+  isPodcast?: boolean;
+  podcastNotes?: string;
+  podcastTranscript?: string;
+  podcastRecap?: string;
 }
 
 export interface Project {

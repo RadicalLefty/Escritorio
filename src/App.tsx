@@ -48,12 +48,13 @@ export default function App() {
   };
 
   return (
-    <div className="w-full h-screen overflow-hidden">
+    <div className={`w-full ${selectedProjectId ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
       {selectedProjectId ? (
         <EditorWorkspace
           projectId={selectedProjectId}
           projectName={selectedProjectName}
           onBack={handleBackToDashboard}
+          onProjectNameChange={setSelectedProjectName}
         />
       ) : (
         <ProjectDashboard onSelectProject={handleSelectProject} />

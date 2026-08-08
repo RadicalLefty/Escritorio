@@ -33,7 +33,14 @@ import {
   Printer,
   Copy,
   Edit3,
-  Info
+  Info,
+  Sprout,
+  Tag,
+  X,
+  Mic,
+  AlignLeft,
+  FileCode,
+  List
 } from 'lucide-react';
 import { 
   Scene, 
@@ -514,9 +521,10 @@ interface EditorWorkspaceProps {
   projectId: string;
   projectName: string;
   onBack: () => void;
+  onProjectNameChange?: (name: string) => void;
 }
 
-export default function EditorWorkspace({ projectId, projectName, onBack }: EditorWorkspaceProps) {
+export default function EditorWorkspace({ projectId, projectName, onBack, onProjectNameChange }: EditorWorkspaceProps) {
   // Connection states
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [initialSyncDone, setInitialSyncDone] = useState(false);
@@ -533,8 +541,9 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
 
   // Workspace configuration
   const [activeSceneId, setActiveSceneId] = useState<string>('scene-1');
-  const [viewMode, setViewMode] = useState<'script' | 'storyboard' | 'brainstorm'>('script');
+  const [viewMode, setViewMode] = useState<'script' | 'storyboard' | 'brainstorm' | 'podcast'>('script');
   const [brainstormTab, setBrainstormTab] = useState<'recap' | 'premise' | 'acts' | 'characters' | 'locations'>('recap');
+  const [podcastTab, setPodcastTab] = useState<'notes' | 'transcript' | 'recap'>('notes');
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -544,13 +553,71 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
   const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
   const [activeSketchId, setActiveSketchId] = useState<string | null>(null);
   const [showShareNotification, setShowShareNotification] = useState(false);
+
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [editingProjectName, setEditingProjectName] = useState(projectName);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const [showSeedlingsPanel, setShowSeedlingsPanel] = useState(false);
+  const [seedlings, setSeedlings] = useState<any[]>([]);
+  const [seedlingSort, setSeedlingSort] = useState('all');
+
+  useEffect(() => {
+    if (showSeedlingsPanel && seedlings.length === 0) {
+      fetch('/api/seedlings')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setSeedlings(data);
+          }
+        })
+        .catch(err => console.error('Failed to fetch seedlings:', err));
+    }
+  }, [showSeedlingsPanel, seedlings.length]);
+
+  useEffect(() => {
+    setEditingProjectName(projectName);
+  }, [projectName]);
+
+  const handleRenameProjectSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingProjectName.trim() || editingProjectName.trim() === projectName) {
+      setIsRenamingProject(false);
+      setEditingProjectName(projectName);
+      setRenameError(null);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingProjectName.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsRenamingProject(false);
+        setRenameError(null);
+        if (onProjectNameChange) {
+          onProjectNameChange(data.name);
+        }
+      } else {
+        const errData = await res.json();
+        setRenameError(errData.error || 'Failed to rename project.');
+      }
+    } catch (err) {
+      setRenameError('Failed to rename project.');
+    }
+  };
   const [showShareExportDropdown, setShowShareExportDropdown] = useState(false);
 
   // Storyboard companion sidebar linking states
   const [showStoryboardSidebar, setShowStoryboardSidebar] = useState(true);
   const [showSceneNavigator, setShowSceneNavigator] = useState(true);
+  const [showPodcastSidebar, setShowPodcastSidebar] = useState(true);
   const [collapsedActs, setCollapsedActs] = useState<Record<string, boolean>>({});
   const [isHoveredSceneNavigator, setIsHoveredSceneNavigator] = useState(false);
+  const [isHoveredPodcastSidebar, setIsHoveredPodcastSidebar] = useState(false);
   const [isHoveredStoryboardSidebar, setIsHoveredStoryboardSidebar] = useState(false);
   const [hoveredStoryboardFrameId, setHoveredStoryboardFrameId] = useState<string | null>(null);
   const [selectedStoryboardFrameId, setSelectedStoryboardFrameId] = useState<string | null>(null);
@@ -1719,6 +1786,53 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
     emitMessage({ type: 'sketches-update', sketches: updatedSketches });
   };
 
+  const podcastData = useMemo(() => {
+    let pd = sketches.find(s => s.isPodcast);
+    if (!pd) {
+      return {
+        id: 'podcast-main',
+        title: 'Podcast Hub',
+        isPodcast: true,
+        strokes: [],
+        description: '',
+        updatedAt: Date.now(),
+        podcastNotes: '',
+        podcastTranscript: '',
+        podcastRecap: ''
+      } as Sketch;
+    }
+    return {
+      ...pd,
+      podcastNotes: pd.podcastNotes || '',
+      podcastTranscript: pd.podcastTranscript || '',
+      podcastRecap: pd.podcastRecap || ''
+    } as Sketch;
+  }, [sketches]);
+
+  const handleUpdatePodcast = (updates: Partial<Sketch>) => {
+    const pdIndex = sketches.findIndex(s => s.isPodcast);
+    let updatedSketches = [...sketches];
+    if (pdIndex === -1) {
+      const newPd: Sketch = {
+        id: 'podcast-main',
+        title: 'Podcast Hub',
+        isPodcast: true,
+        strokes: [],
+        description: '',
+        updatedAt: Date.now(),
+        podcastNotes: '',
+        podcastTranscript: '',
+        podcastRecap: '',
+        ...updates
+      };
+      updatedSketches = [...sketches, newPd];
+    } else {
+      updatedSketches = sketches.map(s => s.isPodcast ? { ...s, ...updates, updatedAt: Date.now() } : s);
+    }
+    setSketches(updatedSketches);
+    emitMessage({ type: 'sketches-update', sketches: updatedSketches });
+  };
+
   const handleUpdateCharacter = (id: string, updatedFields: Partial<BrainstormCharacter>) => {
     const newList = (brainstormData.charactersList || []).map(c => 
       c.id === id ? { ...c, ...updatedFields } : c
@@ -2045,7 +2159,28 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
           
           <div>
             <span className="text-[9px] uppercase font-mono tracking-widest text-[#A0AEC0] font-bold">SCREENPLAY WORKSPACE</span>
-            <h2 className="text-sm font-bold text-[#1A1A1A] leading-none truncate max-w-[180px] sm:max-w-xs">{projectName}</h2>
+            {isRenamingProject ? (
+              <form onSubmit={handleRenameProjectSubmit} className="flex flex-col relative group">
+                <input
+                  type="text"
+                  autoFocus
+                  value={editingProjectName}
+                  onChange={(e) => setEditingProjectName(e.target.value)}
+                  onBlur={() => handleRenameProjectSubmit()}
+                  className="text-sm font-bold text-[#1A1A1A] leading-none bg-white border border-[#1A1A1A] rounded px-1 py-0.5 focus:outline-none w-[180px] sm:w-xs"
+                />
+                {renameError && <div className="absolute top-full mt-1 left-0 bg-red-100 text-red-600 text-[10px] px-1 rounded whitespace-nowrap z-10 shadow-sm">{renameError}</div>}
+              </form>
+            ) : (
+              <div 
+                className="group flex items-center gap-2 cursor-pointer hover:bg-[#F1F1F1] rounded -ml-1 px-1 py-0.5 transition-colors"
+                onClick={() => { setIsRenamingProject(true); setEditingProjectName(projectName); setRenameError(null); }}
+                title="Rename Project"
+              >
+                <h2 className="text-sm font-bold text-[#1A1A1A] leading-none truncate max-w-[180px] sm:max-w-xs">{projectName}</h2>
+                <Edit3 className="w-3 h-3 text-[#A0AEC0] opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -2071,6 +2206,13 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
           >
             <Compass className="w-3.5 h-3.5 text-amber-500" />
             <span className="hidden sm:inline">Brainstorm</span>
+          </button>
+          <button
+            onClick={() => setViewMode('podcast')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all cursor-pointer ${viewMode === 'podcast' ? 'bg-white text-[#1A1A1A] border border-[#E5E5E1] shadow-xs' : 'text-[#718096] hover:text-[#1A1A1A]'}`}
+          >
+            <Mic className="w-3.5 h-3.5 text-blue-500" />
+            <span className="hidden sm:inline">Podcast</span>
           </button>
         </div>
 
@@ -2119,6 +2261,16 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
               </div>
             )}
           </div>
+
+          {/* Seedlings Button */}
+          <button
+            onClick={() => setShowSeedlingsPanel(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F1F1] hover:bg-[#E5E5E1] text-[#2D2D2A] text-xs font-semibold rounded transition-colors cursor-pointer mr-1"
+            title="View Idea Seedlings"
+          >
+            <Sprout className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">Idea Seedlings</span>
+          </button>
 
           {/* Dropdown for Share & Export options */}
           <div className="relative" ref={shareExportDropdownRef}>
@@ -2194,8 +2346,64 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
       {/* Workspace Body Split */}
       <div className="flex-grow flex overflow-hidden relative">
         
+        {/* Idea Seedlings Drawer */}
+        {showSeedlingsPanel && (
+          <div className="absolute top-0 right-0 h-full w-80 bg-white border-l border-[#E5E5E1] shadow-2xl z-50 flex flex-col transform transition-transform">
+            <div className="p-4 border-b border-[#E5E5E1] flex justify-between items-center bg-[#FAFAFA]">
+              <h3 className="text-sm font-bold flex items-center gap-2 text-[#1A1A1A]">
+                <Sprout className="w-4 h-4 text-emerald-600" />
+                Idea Seedlings
+              </h3>
+              <button onClick={() => setShowSeedlingsPanel(false)} className="text-[#A0AEC0] hover:text-[#2D2D2A] cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-3 border-b border-[#E5E5E1] bg-white flex gap-1.5 overflow-x-auto no-scrollbar">
+               {['all', 'character', 'location', 'situation', 'world', 'dialogue', 'other'].map(cat => (
+                 <button
+                    key={cat}
+                    onClick={() => setSeedlingSort(cat)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors whitespace-nowrap cursor-pointer ${seedlingSort === cat ? 'bg-[#1A1A1A] text-white' : 'bg-[#F1F1F1] text-[#718096] hover:bg-[#E5E5E1]'}`}
+                 >
+                   {cat}
+                 </button>
+               ))}
+            </div>
+
+            <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-[#F7F7F5]">
+              {seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).length === 0 ? (
+                <div className="text-center py-10 text-[#A0AEC0]">
+                  <Sprout className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs font-light">No seedlings found in this category.</p>
+                </div>
+              ) : (
+                seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).map(seedling => (
+                  <div key={seedling.id} className="p-3 rounded-lg border border-[#E5E5E1] hover:border-[#CBD5E0] bg-white group relative shadow-xs">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Tag className="w-3 h-3 text-[#A0AEC0]" />
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-[#718096]">{seedling.category}</span>
+                    </div>
+                    <p className="text-xs text-[#1A1A1A] leading-relaxed break-words pr-8">{seedling.content}</p>
+                    
+                    <button
+                      onClick={() => {
+                         navigator.clipboard.writeText(seedling.content);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 text-[#A0AEC0] hover:text-[#1A1A1A] opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded shadow-sm border border-[#E5E5E1] cursor-pointer"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Left Side: Scenes panel (For Script and Storyboard view) */}
-        {viewMode !== 'brainstorm' && showSceneNavigator && (
+        {!['brainstorm', 'podcast'].includes(viewMode) && showSceneNavigator && (
           <div 
             className="relative flex shrink-0 z-20"
             onMouseEnter={() => setIsHoveredSceneNavigator(true)}
@@ -2432,7 +2640,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
         )}
 
         {/* Closed Left Side expand handle */}
-        {viewMode !== 'brainstorm' && !showSceneNavigator && (
+        {!['brainstorm', 'podcast'].includes(viewMode) && !showSceneNavigator && (
           <button
             onClick={() => setShowSceneNavigator(true)}
             className="absolute left-0 top-1/2 -translate-y-1/2 w-5 h-12 flex items-center justify-center bg-white border-y border-r border-[#E5E5E1] rounded-r-lg shadow-xs hover:bg-[#1A1A1A] hover:border-[#1A1A1A] hover:text-white hover:scale-y-110 hover:translate-x-0.5 hover:shadow-md text-[#718096] cursor-pointer transition-all z-30 group"
@@ -2443,6 +2651,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
         )}
 
         {/* Center Canvas Main Body Area */}
+        {viewMode !== 'podcast' && (
         <main className="flex-grow flex flex-col bg-[#F7F7F5] overflow-hidden relative">
           
 
@@ -3853,6 +4062,138 @@ export default function EditorWorkspace({ projectId, projectName, onBack }: Edit
         )}
 
         </main>
+        )}
+        {viewMode === 'podcast' && (
+          <div className="flex-grow flex overflow-hidden relative bg-[#F7F7F5]">
+            {/* Left Side: Podcast Sidebar Nav */}
+            {showPodcastSidebar && (
+              <div 
+                className="relative flex shrink-0 z-20"
+                onMouseEnter={() => setIsHoveredPodcastSidebar(true)}
+                onMouseLeave={() => setIsHoveredPodcastSidebar(false)}
+              >
+                <aside className="w-64 border-r border-[#E5E5E1] bg-[#FAFAFA] flex flex-col shrink-0 select-none">
+                  <div className="p-4 border-b border-[#E5E5E1] bg-white flex flex-col gap-1 shrink-0">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#718096]">Podcast</span>
+                    <span className="text-[9px] text-[#A0AEC0] uppercase tracking-wider font-mono">Episode Planning</span>
+                  </div>
+                  <div className="flex-grow overflow-y-auto p-2 space-y-1">
+                    <button
+                      onClick={() => setPodcastTab('notes')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs font-semibold cursor-pointer transition-all text-left ${
+                        podcastTab === 'notes' 
+                          ? 'bg-white border border-[#E5E5E1] text-[#1A1A1A] font-bold shadow-2xs' 
+                          : 'hover:bg-white/50 text-[#718096] hover:text-[#1A1A1A]'
+                      }`}
+                    >
+                      <AlignLeft className="w-4 h-4 text-blue-500 font-bold" />
+                      <span>Show Notes</span>
+                    </button>
+                    <button
+                      onClick={() => setPodcastTab('transcript')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs font-semibold cursor-pointer transition-all text-left ${
+                        podcastTab === 'transcript' 
+                          ? 'bg-white border border-[#E5E5E1] text-[#1A1A1A] font-bold shadow-2xs' 
+                          : 'hover:bg-white/50 text-[#718096] hover:text-[#1A1A1A]'
+                      }`}
+                    >
+                      <FileCode className="w-4 h-4 text-blue-500 font-bold" />
+                      <span>Transcript</span>
+                    </button>
+                    <button
+                      onClick={() => setPodcastTab('recap')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs font-semibold cursor-pointer transition-all text-left ${
+                        podcastTab === 'recap' 
+                          ? 'bg-white border border-[#E5E5E1] text-[#1A1A1A] font-bold shadow-2xs' 
+                          : 'hover:bg-white/50 text-[#718096] hover:text-[#1A1A1A]'
+                      }`}
+                    >
+                      <List className="w-4 h-4 text-blue-500 font-bold" />
+                      <span>Recap</span>
+                    </button>
+                  </div>
+                </aside>
+                {/* Splitter Hover collapse button */}
+                <button
+                  onClick={() => setShowPodcastSidebar(false)}
+                  className={`absolute top-1/2 -right-3 -translate-y-1/2 w-5 h-12 flex items-center justify-center rounded-r-lg shadow-sm cursor-pointer transition-all z-20 group ${
+                    isHoveredPodcastSidebar 
+                      ? 'bg-[#1A1A1A] border border-[#1A1A1A] text-white scale-y-110 translate-x-0.5 shadow-md' 
+                      : 'bg-white border border-[#E5E5E1] text-[#718096] hover:bg-[#FAFAFA]'
+                  }`}
+                  title="Collapse Podcast Navigator"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                </button>
+              </div>
+            )}
+            
+            {/* Closed Left Side expand handle */}
+            {!showPodcastSidebar && (
+              <button
+                onClick={() => setShowPodcastSidebar(true)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-5 h-12 flex items-center justify-center bg-white border-y border-r border-[#E5E5E1] rounded-r-lg shadow-xs hover:bg-[#1A1A1A] hover:border-[#1A1A1A] hover:text-white hover:scale-y-110 hover:translate-x-0.5 hover:shadow-md text-[#718096] cursor-pointer transition-all z-30 group"
+                title="Expand Podcast Navigator"
+              >
+                <ChevronRight className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+              </button>
+            )}
+
+            {/* Right Side: Podcast Content Area */}
+            <div className="flex-grow flex flex-col bg-white">
+              <div className="p-4 border-b border-[#E5E5E1] bg-[#FAFAFA] shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white p-2 rounded shadow-xs border border-[#E5E5E1]">
+                    {podcastTab === 'notes' && <AlignLeft className="w-4 h-4 text-blue-500" />}
+                    {podcastTab === 'transcript' && <FileCode className="w-4 h-4 text-blue-500" />}
+                    {podcastTab === 'recap' && <List className="w-4 h-4 text-blue-500" />}
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-[#1A1A1A] tracking-tight">
+                      {podcastTab === 'notes' && 'SHOW NOTES'}
+                      {podcastTab === 'transcript' && 'TRANSCRIPT'}
+                      {podcastTab === 'recap' && 'RECAP'}
+                    </h2>
+                    <p className="text-[10px] text-[#718096] font-mono uppercase tracking-wider">
+                      {podcastTab === 'notes' && 'Workspace for episode outline and talking points'}
+                      {podcastTab === 'transcript' && 'Paste raw audio transcript here'}
+                      {podcastTab === 'recap' && 'Paste AI-generated episode recap here'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-grow overflow-y-auto p-6 relative">
+                <div className="max-w-4xl mx-auto h-full flex flex-col">
+                  {podcastTab === 'notes' && (
+                    <textarea
+                      value={podcastData.podcastNotes || ''}
+                      onChange={(e) => handleUpdatePodcast({ podcastNotes: e.target.value })}
+                      placeholder="Enter show notes, topics, talking points, and outlines here..."
+                      className="flex-grow w-full bg-[#FAFAFA] border border-[#E5E5E1] hover:border-[#1A1A1A] focus:bg-white focus:outline-none focus:border-[#1A1A1A] text-sm leading-relaxed rounded-md p-6 text-[#2D2D2A] transition-colors resize-none font-sans"
+                    />
+                  )}
+                  {podcastTab === 'transcript' && (
+                    <textarea
+                      value={podcastData.podcastTranscript || ''}
+                      onChange={(e) => handleUpdatePodcast({ podcastTranscript: e.target.value })}
+                      placeholder="Paste your raw transcript text here..."
+                      className="flex-grow w-full bg-[#FAFAFA] border border-[#E5E5E1] hover:border-[#1A1A1A] focus:bg-white focus:outline-none focus:border-[#1A1A1A] text-sm leading-relaxed rounded-md p-6 text-[#2D2D2A] transition-colors resize-none font-sans"
+                    />
+                  )}
+                  {podcastTab === 'recap' && (
+                    <textarea
+                      value={podcastData.podcastRecap || ''}
+                      onChange={(e) => handleUpdatePodcast({ podcastRecap: e.target.value })}
+                      placeholder="Paste the generated recap here..."
+                      className="flex-grow w-full bg-[#FAFAFA] border border-[#E5E5E1] hover:border-[#1A1A1A] focus:bg-white focus:outline-none focus:border-[#1A1A1A] text-sm leading-relaxed rounded-md p-6 text-[#2D2D2A] transition-colors resize-none font-sans"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Right Sidebar: Storyboard Companion Sidebar (Symmetrical & Sibling of main) */}
         {viewMode === 'script' && showStoryboardSidebar && (

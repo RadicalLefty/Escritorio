@@ -10,7 +10,11 @@ import {
   getProjectData, 
   saveProjectData, 
   deleteProject,
-  checkDatabaseStatus
+  renameProject,
+  checkDatabaseStatus,
+  getSeedlings,
+  createSeedling,
+  deleteSeedling
 } from './server/db.js';
 import { 
   Scene, 
@@ -68,13 +72,36 @@ async function startServer() {
   // Create new project
   app.post('/api/projects', async (req, res) => {
     try {
+      const { name, seedlingContent } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: 'Project name is required' });
+      }
+      const projects = await getProjects();
+      if (projects.some(p => p.name.toLowerCase() === name.trim().toLowerCase())) {
+        return res.status(400).json({ error: 'A script with this name already exists' });
+      }
+      const id = crypto.randomUUID();
+      await createProject(id, name.trim(), seedlingContent);
+      res.status(201).json({ id, name: name.trim() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Rename project
+  app.put('/api/projects/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
       const { name } = req.body;
       if (!name) {
         return res.status(400).json({ error: 'Project name is required' });
       }
-      const id = crypto.randomUUID();
-      await createProject(id, name);
-      res.status(201).json({ id, name });
+      const projects = await getProjects();
+      if (projects.some(p => p.id !== id && p.name.toLowerCase() === name.trim().toLowerCase())) {
+        return res.status(400).json({ error: 'A script with this name already exists' });
+      }
+      await renameProject(id, name.trim());
+      res.json({ id, name: name.trim() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -92,6 +119,42 @@ async function startServer() {
     }
   });
 
+  // Get all seedlings
+  app.get('/api/seedlings', async (req, res) => {
+    try {
+      const seedlings = await getSeedlings();
+      res.json(seedlings);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create new seedling
+  app.post('/api/seedlings', async (req, res) => {
+    try {
+      const { category, content } = req.body;
+      if (!category || !content) {
+        return res.status(400).json({ error: 'Category and content are required' });
+      }
+      const id = crypto.randomUUID();
+      await createSeedling(id, category, content);
+      res.status(201).json({ id, category, content });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete seedling
+  app.delete('/api/seedlings/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await deleteSeedling(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Import project
   app.post('/api/projects/import', async (req, res) => {
     try {
@@ -99,8 +162,12 @@ async function startServer() {
       if (!name) {
         return res.status(400).json({ error: 'Project name is required' });
       }
+      const projects = await getProjects();
+      if (projects.some(p => p.name.toLowerCase() === name.trim().toLowerCase())) {
+        return res.status(400).json({ error: 'A script with this name already exists' });
+      }
       const id = crypto.randomUUID();
-      await createProject(id, name);
+      await createProject(id, name.trim());
       
       // Save data directly
       await saveProjectData(id, {
