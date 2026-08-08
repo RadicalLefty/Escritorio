@@ -564,6 +564,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
   const [showSeedlingAddModal, setShowSeedlingAddModal] = useState(false);
   const [newSeedlingCategory, setNewSeedlingCategory] = useState('character');
   const [newSeedlingContent, setNewSeedlingContent] = useState('');
+  const [confirmRandomSeedling, setConfirmRandomSeedling] = useState<any | null>(null);
 
   const handleAddSeedling = async () => {
     if (!newSeedlingContent.trim()) return;
@@ -587,54 +588,19 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
   const handleInsertRandomIdea = () => {
     if (seedlings.length === 0) return;
     const randomSeedling = seedlings[Math.floor(Math.random() * seedlings.length)];
-    const textToInsert = `[Idea: ${randomSeedling.category.toUpperCase()}] ${randomSeedling.content}`;
+    setConfirmRandomSeedling(randomSeedling);
+  };
 
-    if (viewMode === 'script') {
-      const currentBlocks = filteredBlocks;
-      if (currentBlocks.length > 0) {
-        const lastBlock = currentBlocks[currentBlocks.length - 1];
-        handleUpdateAndInsertBlockAfter(lastBlock.id, lastBlock.text, 'action', textToInsert);
-      } else {
-        const newId = `block-${crypto.randomUUID()}`;
-        const newBlock: ScriptBlock = {
-          id: newId,
-          type: 'action',
-          text: textToInsert,
-          sceneId: activeSceneId,
-        };
-        const newBlocks = [...scriptBlocks, newBlock];
-        setScriptBlocks(newBlocks);
-        socketRef.current?.send(JSON.stringify({ type: 'script-update', scriptBlocks: newBlocks }));
-      }
-    } else if (viewMode === 'brainstorm') {
-      if (brainstormTab === 'recap') {
-        const currentText = brainstormData.outline || '';
-        handleUpdateBrainstorm({ outline: currentText ? `${currentText}\n\n${textToInsert}` : textToInsert });
-      } else if (brainstormTab === 'premise') {
-        const currentText = brainstormData.logline || '';
-        handleUpdateBrainstorm({ logline: currentText ? `${currentText}\n\n${textToInsert}` : textToInsert });
-      } else if (brainstormTab === 'acts') {
-        const newList = [...(brainstormData.actsList || [])];
-        if (newList[0]) {
-          newList[0].description = newList[0].description ? `${newList[0].description}\n\n${textToInsert}` : textToInsert;
-          handleUpdateBrainstorm({ actsList: newList });
-        }
-      } else if (brainstormTab === 'characters') {
-        if (selectedCharacterId) {
-          const newList = (brainstormData.charactersList || []).map(c => 
-            c.id === selectedCharacterId ? { ...c, backstory: c.backstory ? `${c.backstory}\n\n${textToInsert}` : textToInsert } : c
-          );
-          handleUpdateBrainstorm({ charactersList: newList });
-        }
-      } else if (brainstormTab === 'locations') {
-        if (selectedLocationId) {
-          const newList = (brainstormData.locationsList || []).map(l => 
-            l.id === selectedLocationId ? { ...l, description: l.description ? `${l.description}\n\n${textToInsert}` : textToInsert } : l
-          );
-          handleUpdateBrainstorm({ locationsList: newList });
-        }
-      }
-    }
+  const handleConfirmInsertRandomIdea = (seedlingToInsert: any) => {
+    if (!seedlingToInsert) return;
+    const currentInserted = brainstormData.insertedSeedlings || [];
+    const newSeedling = {
+      id: `inserted-${crypto.randomUUID()}`,
+      category: seedlingToInsert.category,
+      content: seedlingToInsert.content,
+      insertedAt: Date.now()
+    };
+    handleUpdateBrainstorm({ insertedSeedlings: [...currentInserted, newSeedling] });
   };
 
   useEffect(() => {
@@ -1806,7 +1772,8 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
         actsCount: 3,
         actsList: defaultActs,
         charactersList: [],
-        locationsList: []
+        locationsList: [],
+        insertedSeedlings: []
       } as Sketch;
     }
 
@@ -1821,7 +1788,8 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
       actsCount: bs.actsCount || 3,
       actsList: bs.actsList || defaultActs,
       charactersList: bs.charactersList || [],
-      locationsList: bs.locationsList || []
+      locationsList: bs.locationsList || [],
+      insertedSeedlings: bs.insertedSeedlings || []
     } as Sketch;
   }, [sketches]);
 
@@ -1851,6 +1819,7 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
         actsList: defaultActs,
         charactersList: [],
         locationsList: [],
+        insertedSeedlings: [],
         ...updates
       };
       updatedSketches = [newBs, ...sketches];
@@ -2511,23 +2480,36 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
                       <p className="text-xs font-light">No seedlings found in this category.</p>
                     </div>
                   ) : (
-                    seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).map(seedling => (
-                      <div key={seedling.id} className="p-3 rounded-lg border border-[#E5E5E1] hover:border-[#CBD5E0] bg-white group relative shadow-xs">
+                    seedlings.filter(s => seedlingSort === 'all' || s.category === seedlingSort).map((seedling, idx) => (
+                      <div key={seedling.id ? `sidebar-seed-${seedling.id}-${idx}` : `sidebar-seed-${idx}`} className="p-3 rounded-lg border border-[#E5E5E1] hover:border-[#CBD5E0] bg-white group relative shadow-xs">
                         <div className="flex items-center gap-1.5 mb-2">
                           <Tag className="w-3 h-3 text-[#A0AEC0]" />
                           <span className="text-[10px] uppercase font-bold tracking-widest text-[#718096]">{seedling.category}</span>
                         </div>
-                        <p className="text-xs text-[#1A1A1A] leading-relaxed break-words pr-8">{seedling.content}</p>
+                        <p className="text-xs text-[#1A1A1A] leading-relaxed break-words">{seedling.content}</p>
                         
-                        <button
-                          onClick={() => {
-                             navigator.clipboard.writeText(seedling.content);
-                          }}
-                          className="absolute top-2 right-2 p-1.5 text-[#A0AEC0] hover:text-[#1A1A1A] opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded shadow-sm border border-[#E5E5E1] cursor-pointer"
-                          title="Copy to clipboard"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#F1F1F1]">
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmInsertRandomIdea(seedling)}
+                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Insert seedling into project overview"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Insert</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(seedling.content);
+                            }}
+                            className="p-1 text-[#A0AEC0] hover:text-[#1A1A1A] transition-colors rounded hover:bg-[#FAFAFA] border border-[#E5E5E1] cursor-pointer flex items-center gap-1 text-[10px]"
+                            title="Copy to clipboard"
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -3338,6 +3320,44 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
                           <span className="font-semibold text-[#1A1A1A] block">{brainstormData.targetAudience || 'Not set'}</span>
                         </div>
                       </div>
+
+                      {/* Seedlings Box */}
+                      {brainstormData.insertedSeedlings && brainstormData.insertedSeedlings.length > 0 && (
+                        <div className="mb-8 p-5 bg-[#F4F9F5] border-l-4 border-emerald-500 rounded-r-lg space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-[9px] uppercase font-mono font-bold tracking-wider text-emerald-800 flex items-center gap-1.5">
+                              <Sprout className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>SEEDLINGS ({brainstormData.insertedSeedlings.length})</span>
+                            </h3>
+                            <span className="text-[10px] text-emerald-700 font-mono">Inserted idea seedlings</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {brainstormData.insertedSeedlings.map((seed, idx) => (
+                              <div key={seed.id ? `inserted-${seed.id}-${idx}` : `inserted-seed-${idx}`} className="bg-white border border-emerald-200/80 rounded-md p-3 shadow-3xs space-y-1.5 relative group">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase">
+                                    {seed.category}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = brainstormData.insertedSeedlings?.filter((_, i) => i !== idx);
+                                      handleUpdateBrainstorm({ insertedSeedlings: updated });
+                                    }}
+                                    className="text-[#A0AEC0] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 p-0.5 cursor-pointer"
+                                    title="Remove seedling"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <p className="text-xs text-[#2D2D2A] leading-relaxed break-words font-sans">
+                                  {seed.content}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* General Outline */}
                       <div className="space-y-3 border-b border-[#E5E5E1] pb-8 mb-8">
@@ -4566,6 +4586,60 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
             <Trash2 className="w-3.5 h-3.5" />
             <span>Delete Panel</span>
           </button>
+        </div>
+      )}
+
+      {/* Random Idea Confirmation Pop-up Modal */}
+      {confirmRandomSeedling && (
+        <div className="fixed inset-0 bg-[#1A1A1A]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-[#E5E5E1] shadow-2xl max-w-md w-full p-6 relative animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#E5E5E1] pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-[#1A1A1A]">Random Idea Seedling</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmRandomSeedling(null)}
+                className="text-[#A0AEC0] hover:text-[#1A1A1A] p-1 rounded hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-[#718096]">You got the following seedling:</p>
+              <div className="p-3 bg-[#F7F7F5] rounded-lg border border-[#E5E5E1] space-y-2">
+                <span className="inline-block px-2 py-0.5 bg-indigo-100 text-indigo-800 font-bold uppercase text-[10px] rounded tracking-wider">
+                  {confirmRandomSeedling.category}
+                </span>
+                <p className="text-sm text-[#1A1A1A] leading-relaxed break-words">
+                  {confirmRandomSeedling.content}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E5E5E1]">
+                <button
+                  type="button"
+                  onClick={() => setConfirmRandomSeedling(null)}
+                  className="px-4 py-2 bg-white border border-[#E5E5E1] hover:bg-[#FAFAFA] text-[#718096] text-xs font-bold rounded transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const seed = confirmRandomSeedling;
+                    setConfirmRandomSeedling(null);
+                    handleConfirmInsertRandomIdea(seed);
+                  }}
+                  className="bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Insert
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

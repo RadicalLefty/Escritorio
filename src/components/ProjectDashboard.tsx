@@ -34,6 +34,7 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
   const [newSeedlingContent, setNewSeedlingContent] = useState('');
   const [seedlingSort, setSeedlingSort] = useState('all');
   const [showSeedlingAddModal, setShowSeedlingAddModal] = useState(false);
+  const [confirmRandomSeedling, setConfirmRandomSeedling] = useState<Seedling | null>(null);
 
   // Fetch projects from DB
   const fetchData = async () => {
@@ -113,7 +114,7 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
   const handleCreateRandomFromSeedling = () => {
     if (seedlings.length === 0) return;
     const randomIndex = Math.floor(Math.random() * seedlings.length);
-    handleCreateFromSeedling(seedlings[randomIndex]);
+    setConfirmRandomSeedling(seedlings[randomIndex]);
   };
 
   const handleCreateSeedling = async (e: React.FormEvent) => {
@@ -245,72 +246,13 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
               CoScript Studio
             </h1>
           </div>
-          
-          <div className="relative" ref={menuRef}>
-            <button 
-              onClick={() => setShowNewMenu(!showNewMenu)}
-              className="flex items-center gap-2 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded-md px-6 py-3 text-sm font-medium transition-all shadow-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              New Workspace
-            </button>
-            
-            {showNewMenu && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-xl border border-[#E5E5E1] p-4 z-50">
-                <form 
-                  onSubmit={(e) => { e.preventDefault(); handleCreateProject(newProjectName); }}
-                  className="mb-4 pb-4 border-b border-[#E5E5E1]"
-                >
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-[#718096] mb-2">Start Blank Script</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Untitled Screenplay..."
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    className="w-full bg-[#FAFAFA] border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] focus:bg-white transition-colors mb-2"
-                  />
-                  {createError && (
-                    <div className="mb-2 text-xs text-red-600 font-medium">
-                      {createError}
-                    </div>
-                  )}
-                  <button
-                    type="submit"
-                    className="w-full bg-[#FAFAFA] hover:bg-[#F1F1F1] border border-[#E5E5E1] text-[#1A1A1A] rounded py-2 text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    Create Blank
-                  </button>
-                </form>
-                
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-[#718096] mb-2">Import Backup</label>
-                  <label className="flex items-center justify-center w-full bg-[#FAFAFA] hover:bg-[#F1F1F1] border border-[#E5E5E1] border-dashed text-[#1A1A1A] rounded py-3 text-xs font-semibold transition-colors cursor-pointer">
-                    <Upload className="w-4 h-4 mr-2 text-[#718096]" />
-                    Select .json File
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={(e) => { handleImportProject(e); setShowNewMenu(false); }}
-                      className="hidden"
-                    />
-                  </label>
-                  {importError && (
-                    <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded p-2">
-                      {importError}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start flex-grow">
           
           {/* Seedlings Column */}
           <div className="bg-white rounded-xl border border-[#E5E5E1] shadow-sm flex flex-col h-full min-h-[500px]">
-            <div className="p-6 border-b border-[#E5E5E1] flex items-center justify-between">
+            <div className="p-6 border-b border-[#E5E5E1] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-sm font-bold flex items-center gap-2 text-[#1A1A1A]">
                   <Sprout className="w-5 h-5 text-emerald-600" />
@@ -318,76 +260,24 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
                 </h2>
                 <p className="text-[11px] text-[#718096] mt-1">Jot down characters, locations, or plots to inspire your next script.</p>
               </div>
-            </div>
-            
-            <div className="p-4 bg-[#FAFAFA] border-b border-[#E5E5E1]">
-              {!showSeedlingAddModal ? (
-                <div className="flex gap-2 justify-end">
-                  <button 
-                    onClick={() => setShowSeedlingAddModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white text-xs font-semibold rounded transition-colors shadow-sm cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Idea
-                  </button>
-                  <button 
-                    onClick={handleCreateRandomFromSeedling}
-                    disabled={seedlings.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F1F1] hover:bg-[#E5E5E1] text-[#2D2D2A] text-xs font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm"
-                    title="Start a new script from a random seedling"
-                  >
-                    <Shuffle className="w-3.5 h-3.5" />
-                    Start from Random
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={(e) => {
-                  handleCreateSeedling(e);
-                  if (newSeedlingContent.trim()) setShowSeedlingAddModal(false);
-                }} className="flex flex-col gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Category</label>
-                    <select
-                      value={newSeedlingCategory}
-                      onChange={(e) => setNewSeedlingCategory(e.target.value)}
-                      className="bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] w-full cursor-pointer"
-                    >
-                      <option value="character">Character</option>
-                      <option value="location">Location</option>
-                      <option value="situation">Situation</option>
-                      <option value="world">World Building</option>
-                      <option value="dialogue">Dialogue</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Details</label>
-                    <textarea
-                      required
-                      placeholder="E.g., A detective who is afraid of the dark..."
-                      value={newSeedlingContent}
-                      onChange={(e) => setNewSeedlingContent(e.target.value)}
-                      className="w-full bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] min-h-[100px] resize-y"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowSeedlingAddModal(false)}
-                      className="px-4 py-2 bg-white border border-[#E5E5E1] hover:bg-[#FAFAFA] text-[#718096] text-xs font-bold rounded transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!newSeedlingContent.trim()}
-                      className="bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded px-4 py-2 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      Save Idea
-                    </button>
-                  </div>
-                </form>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <button 
+                  onClick={() => setShowSeedlingAddModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white text-xs font-semibold rounded transition-colors shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Idea
+                </button>
+                <button 
+                  onClick={handleCreateRandomFromSeedling}
+                  disabled={seedlings.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F1F1] hover:bg-[#E5E5E1] text-[#2D2D2A] text-xs font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+                  title="Start a new script from a random seedling"
+                >
+                  <Shuffle className="w-3.5 h-3.5" />
+                  Start from Random
+                </button>
+              </div>
             </div>
             
             <div className="p-4 border-b border-[#E5E5E1] bg-white flex gap-2 overflow-x-auto no-scrollbar">
@@ -412,8 +302,8 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
                   <p className="text-sm font-light">No seedlings planted yet.</p>
                 </div>
               ) : (
-                filteredSeedlings.map(seedling => (
-                  <div key={seedling.id} className="group p-4 rounded-lg bg-white border border-[#E5E5E1] shadow-xs hover:border-[#CBD5E0] transition-all relative">
+                filteredSeedlings.map((seedling, idx) => (
+                  <div key={seedling.id ? `pd-seed-${seedling.id}-${idx}` : `pd-seed-${idx}`} className="group p-4 rounded-lg bg-white border border-[#E5E5E1] shadow-xs hover:border-[#CBD5E0] transition-all relative">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-grow min-w-0">
                         <div className="flex items-center gap-1.5 mb-1.5">
@@ -451,14 +341,74 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
 
           {/* Existing Projects List */}
           <div className="bg-white rounded-xl border border-[#E5E5E1] shadow-sm flex flex-col h-full min-h-[500px]">
-            <div className="p-6 border-b border-[#E5E5E1]">
-              <h2 className="text-sm font-bold text-[#1A1A1A] flex items-center justify-between">
-                <span className="flex items-center gap-2">
+            <div className="p-6 border-b border-[#E5E5E1] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-bold text-[#1A1A1A] flex items-center gap-2">
                   <FileText className="w-5 h-5 text-blue-600" />
-                  Active Workspaces
-                </span>
-                <span className="text-xs font-mono text-[#A0AEC0] font-normal bg-[#F1F1F1] px-2 py-0.5 rounded-full">{projects.length} files</span>
-              </h2>
+                  <span>Active Workspaces</span>
+                  <span className="text-xs font-mono text-[#A0AEC0] font-normal bg-[#F1F1F1] px-2 py-0.5 rounded-full">{projects.length} files</span>
+                </h2>
+                <p className="text-[11px] text-[#718096] mt-1">Manage and launch your screenwriting projects.</p>
+              </div>
+
+              <div className="relative shrink-0" ref={menuRef}>
+                <button 
+                  onClick={() => setShowNewMenu(!showNewMenu)}
+                  className="flex items-center gap-2 bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded-md px-4 py-2 text-xs font-semibold transition-all shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Workspace
+                </button>
+                
+                {showNewMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-xl border border-[#E5E5E1] p-4 z-50">
+                    <form 
+                      onSubmit={(e) => { e.preventDefault(); handleCreateProject(newProjectName); }}
+                      className="mb-4 pb-4 border-b border-[#E5E5E1]"
+                    >
+                      <label className="block text-[11px] font-bold uppercase tracking-widest text-[#718096] mb-2">Start Blank Script</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Untitled Screenplay..."
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        className="w-full bg-[#FAFAFA] border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] focus:bg-white transition-colors mb-2"
+                      />
+                      {createError && (
+                        <div className="mb-2 text-xs text-red-600 font-medium">
+                          {createError}
+                        </div>
+                      )}
+                      <button
+                        type="submit"
+                        className="w-full bg-[#FAFAFA] hover:bg-[#F1F1F1] border border-[#E5E5E1] text-[#1A1A1A] rounded py-2 text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Create Blank
+                      </button>
+                    </form>
+                    
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-widest text-[#718096] mb-2">Import Backup</label>
+                      <label className="flex items-center justify-center w-full bg-[#FAFAFA] hover:bg-[#F1F1F1] border border-[#E5E5E1] border-dashed text-[#1A1A1A] rounded py-3 text-xs font-semibold transition-colors cursor-pointer">
+                        <Upload className="w-4 h-4 mr-2 text-[#718096]" />
+                        Select .json File
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={(e) => { handleImportProject(e); setShowNewMenu(false); }}
+                          className="hidden"
+                        />
+                      </label>
+                      {importError && (
+                        <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded p-2">
+                          {importError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex-grow overflow-y-auto p-4">
@@ -567,6 +517,129 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
           Zero external AI. Encrypted SQLite storage. Local data protection & team ownership.
         </p>
       </footer>
+
+      {/* Add Idea Seedling Pop-up Modal */}
+      {showSeedlingAddModal && (
+        <div className="fixed inset-0 bg-[#1A1A1A]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-[#E5E5E1] shadow-2xl max-w-md w-full p-6 relative animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#E5E5E1] pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Sprout className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-sm font-bold text-[#1A1A1A]">Add Idea Seedling</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSeedlingAddModal(false)}
+                className="text-[#A0AEC0] hover:text-[#1A1A1A] p-1 rounded hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              handleCreateSeedling(e);
+              if (newSeedlingContent.trim()) setShowSeedlingAddModal(false);
+            }} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Category</label>
+                <select
+                  value={newSeedlingCategory}
+                  onChange={(e) => setNewSeedlingCategory(e.target.value)}
+                  className="bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] w-full cursor-pointer"
+                >
+                  <option value="character">Character</option>
+                  <option value="location">Location</option>
+                  <option value="situation">Situation</option>
+                  <option value="world">World Building</option>
+                  <option value="dialogue">Dialogue</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#718096] uppercase tracking-wider mb-2">Details</label>
+                <textarea
+                  required
+                  autoFocus
+                  placeholder="E.g., A detective who is afraid of the dark..."
+                  value={newSeedlingContent}
+                  onChange={(e) => setNewSeedlingContent(e.target.value)}
+                  className="w-full bg-white border border-[#E5E5E1] text-[#2D2D2A] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#1A1A1A] min-h-[110px] resize-y"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E5E5E1]">
+                <button
+                  type="button"
+                  onClick={() => setShowSeedlingAddModal(false)}
+                  className="px-4 py-2 bg-white border border-[#E5E5E1] hover:bg-[#FAFAFA] text-[#718096] text-xs font-bold rounded transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newSeedlingContent.trim()}
+                  className="bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded px-4 py-2 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Save Idea
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Random Idea Confirmation Pop-up Modal */}
+      {confirmRandomSeedling && (
+        <div className="fixed inset-0 bg-[#1A1A1A]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-[#E5E5E1] shadow-2xl max-w-md w-full p-6 relative animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#E5E5E1] pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Shuffle className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-[#1A1A1A]">Random Idea Seedling</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmRandomSeedling(null)}
+                className="text-[#A0AEC0] hover:text-[#1A1A1A] p-1 rounded hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-[#718096]">You got the following seedling:</p>
+              <div className="p-3 bg-[#F7F7F5] rounded-lg border border-[#E5E5E1] space-y-2">
+                <span className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold uppercase text-[10px] rounded tracking-wider">
+                  {confirmRandomSeedling.category}
+                </span>
+                <p className="text-sm text-[#1A1A1A] leading-relaxed break-words">
+                  {confirmRandomSeedling.content}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E5E5E1]">
+                <button
+                  type="button"
+                  onClick={() => setConfirmRandomSeedling(null)}
+                  className="px-4 py-2 bg-white border border-[#E5E5E1] hover:bg-[#FAFAFA] text-[#718096] text-xs font-bold rounded transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirmRandomSeedling) {
+                      handleCreateFromSeedling(confirmRandomSeedling);
+                      setConfirmRandomSeedling(null);
+                    }
+                  }}
+                  className="bg-[#1A1A1A] hover:bg-[#2D2D2A] text-white rounded px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -96,6 +96,7 @@ export interface Sketch {
   act4Notes?: string;
   charactersList?: BrainstormCharacter[];
   locationsList?: BrainstormLocation[];
+  insertedSeedlings?: { id: string; category: string; content: string; insertedAt?: number }[];
 
   // Optional Podcast fields
   isPodcast?: boolean;
