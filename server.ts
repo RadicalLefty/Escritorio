@@ -72,7 +72,7 @@ async function startServer() {
   // Create new project
   app.post('/api/projects', async (req, res) => {
     try {
-      const { name, seedlingContent } = req.body;
+      const { name, seedlingContent, seedlingCategory } = req.body;
       if (!name) {
         return res.status(400).json({ error: 'Project name is required' });
       }
@@ -81,7 +81,7 @@ async function startServer() {
         return res.status(400).json({ error: 'A script with this name already exists' });
       }
       const id = crypto.randomUUID();
-      await createProject(id, name.trim(), seedlingContent);
+      await createProject(id, name.trim(), seedlingContent, seedlingCategory);
       res.status(201).json({ id, name: name.trim() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

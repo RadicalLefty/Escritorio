@@ -143,7 +143,7 @@ export async function getProjects(): Promise<ProjectRow[]> {
   }
 }
 
-export async function createProject(id: string, name: string, seedlingContent?: string): Promise<void> {
+export async function createProject(id: string, name: string, seedlingContent?: string, seedlingCategory?: string): Promise<void> {
   const encryptedName = encrypt(name);
   const now = Date.now();
   
@@ -168,8 +168,16 @@ export async function createProject(id: string, name: string, seedlingContent?: 
       description: '',
       updatedAt: now,
       isBrainstorm: true,
-      outline: seedlingContent,
-      logline: seedlingContent,
+      outline: '',
+      logline: '',
+      insertedSeedlings: [
+        {
+          id: `seed-${now}`,
+          category: seedlingCategory || 'idea',
+          content: seedlingContent,
+          insertedAt: now
+        }
+      ]
     });
   }
 

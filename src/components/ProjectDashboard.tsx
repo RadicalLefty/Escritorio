@@ -82,14 +82,14 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
     return name;
   };
 
-  const handleCreateProject = async (name: string, seedlingContent?: string) => {
+  const handleCreateProject = async (name: string, seedlingContent?: string, seedlingCategory?: string) => {
     if (!name.trim()) return;
     setCreateError(null);
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, seedlingContent }),
+        body: JSON.stringify({ name, seedlingContent, seedlingCategory }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -108,7 +108,7 @@ export default function ProjectDashboard({ onSelectProject }: ProjectDashboardPr
 
   const handleCreateFromSeedling = (seedling: Seedling) => {
     const defaultName = getAvailableProjectName('New Script');
-    handleCreateProject(defaultName, seedling.content);
+    handleCreateProject(defaultName, seedling.content, seedling.category);
   };
 
   const handleCreateRandomFromSeedling = () => {
