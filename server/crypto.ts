@@ -21,16 +21,22 @@ export function encrypt(text: string): string {
 }
 
 export function decrypt(text: string): string {
+  if (!text) return '';
+  const isEncryptedFormat = /^[0-9a-fA-F]{32}:[0-9a-fA-F]+$/.test(text);
+  if (!isEncryptedFormat) {
+    return text;
+  }
   try {
     const textParts = text.split(':');
-    const iv = Buffer.from(textParts.shift() || '', 'hex');
+    const ivHex = textParts.shift() || '';
+    const iv = Buffer.from(ivHex, 'hex');
     const encryptedTextHex = textParts.join(':');
     const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
     let decrypted = decipher.update(encryptedTextHex, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (err) {
-    console.error('Decryption failed. Database file might be corrupted or key is incorrect:', err);
-    return '[]'; // Safe fallback
+    console.error('Decryption failed, returning original text:', err);
+    return text;
   }
 }

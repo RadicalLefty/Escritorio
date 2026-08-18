@@ -68,6 +68,7 @@ async function initPgTables() {
         )
       `);
       console.log('PostgreSQL tables checked/created successfully');
+      await ensureSonOfACobblerExists();
     } finally {
       client.release();
     }
@@ -106,6 +107,7 @@ function initSqliteTables() {
         created_at INTEGER NOT NULL
       )
     `);
+    ensureSonOfACobblerExists();
   });
 }
 
@@ -245,6 +247,178 @@ export async function createProject(id: string, name: string, seedlingContent?: 
   }
 }
 
+function parseTextToScriptBlocks(text: string): ScriptBlock[] {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const blocks: ScriptBlock[] = [];
+  let sceneCount = 1;
+  let currentSceneId = `scene-${sceneCount}`;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isHeading = /^(INT|EXT|EST|INT\/EXT|I\/E)[\s\.]/i.test(line);
+
+    if (isHeading) {
+      currentSceneId = `scene-${sceneCount++}`;
+      blocks.push({
+        id: `block-${i + 1}`,
+        type: 'scene-heading',
+        text: line.toUpperCase(),
+        sceneId: currentSceneId,
+      });
+    } else if (line === line.toUpperCase() && line.length < 35 && !line.endsWith('.')) {
+      blocks.push({
+        id: `block-${i + 1}`,
+        type: 'character',
+        text: line,
+        sceneId: currentSceneId,
+      });
+    } else if (line.startsWith('(') && line.endsWith(')')) {
+      blocks.push({
+        id: `block-${i + 1}`,
+        type: 'parenthetical',
+        text: line,
+        sceneId: currentSceneId,
+      });
+    } else if (i > 0 && blocks[blocks.length - 1]?.type === 'character') {
+      blocks.push({
+        id: `block-${i + 1}`,
+        type: 'dialogue',
+        text: line,
+        sceneId: currentSceneId,
+      });
+    } else {
+      blocks.push({
+        id: `block-${i + 1}`,
+        type: 'action',
+        text: line,
+        sceneId: currentSceneId,
+      });
+    }
+  }
+  return blocks.length > 0
+    ? blocks
+    : [
+        { id: 'block-1', type: 'scene-heading', text: 'INT. BASEMENT WORKSHOP - DAY', sceneId: 'scene-1' },
+        { id: 'block-2', type: 'action', text, sceneId: 'scene-1' },
+      ];
+}
+
+function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  let decrypted = raw;
+  try {
+    decrypted = decrypt(raw);
+  } catch {
+    decrypted = raw;
+  }
+
+  try {
+    const parsed = JSON.parse(decrypted);
+    return Array.isArray(fallback) && !Array.isArray(parsed) ? fallback : parsed;
+  } catch {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(fallback) && !Array.isArray(parsed) ? fallback : parsed;
+    } catch {
+      if (Array.isArray(fallback) && decrypted && decrypted.trim().length > 0) {
+        if (!decrypted.trim().startsWith('{') && !decrypted.trim().startsWith('[')) {
+          return parseTextToScriptBlocks(decrypted) as unknown as T;
+        }
+      }
+      return fallback;
+    }
+  }
+}
+
+async function ensureSonOfACobblerExists() {
+  const projectId = 'proj-son-of-a-cobbler';
+  const projectName = 'Son of a Cobbler';
+  const now = Date.now();
+  const encryptedName = encrypt(projectName);
+
+  const scenes: Scene[] = [{ id: 'scene-1', title: 'Scene 1: The Basement Workshop', order: 0 }];
+
+  const scriptBlocks: ScriptBlock[] = [
+    { id: 'block-1', type: 'scene-heading', text: 'INT. BASEMENT WORKSHOP - DAY', sceneId: 'scene-1' },
+    {
+      id: 'block-2',
+      type: 'action',
+      text: 'Dust motes hover in thin beams of amber sunlight piercing the narrow high windows of the cobblestone cellar.',
+      sceneId: 'scene-1',
+    },
+    { id: 'block-3', type: 'character', text: 'DANIEL (18)', sceneId: 'scene-1' },
+    {
+      id: 'block-4',
+      type: 'action',
+      text: 'hunches over a low workbench, his fingers stained dark with cobbler wax and leather dye.',
+      sceneId: 'scene-1',
+    },
+    { id: 'block-5', type: 'character', text: 'OLD COBBLER', sceneId: 'scene-1' },
+    { id: 'block-6', type: 'parenthetical', text: '(without looking up from his lasts)', sceneId: 'scene-1' },
+    { id: 'block-7', type: 'dialogue', text: 'Pull the thread tight, Daniel. Loose stitches let the winter in.', sceneId: 'scene-1' },
+    { id: 'block-8', type: 'character', text: 'DANIEL', sceneId: 'scene-1' },
+    { id: 'block-9', type: 'dialogue', text: 'Winter is already in, Father.', sceneId: 'scene-1' },
+    { id: 'block-10', type: 'action', text: 'The old man stops his hammer mid-air.', sceneId: 'scene-1' },
+  ];
+
+  const storyboardFrames: StoryboardFrame[] = [
+    { id: 'frame-1', sceneId: 'scene-1', strokes: [], caption: 'Wide shot of dusty basement workshop.', order: 0 },
+  ];
+
+  const sketches: Sketch[] = [];
+
+  try {
+    if (pgPool) {
+      const check = await pgPool.query('SELECT id FROM projects WHERE id = $1', [projectId]);
+      if (check.rows.length === 0) {
+        await pgPool.query('INSERT INTO projects (id, name, created_at, updated_at) VALUES ($1, $2, $3, $4)', [
+          projectId,
+          encryptedName,
+          now,
+          now,
+        ]);
+        await pgPool.query(
+          'INSERT INTO project_data (project_id, scenes, script_blocks, storyboard_frames, sketches) VALUES ($1, $2, $3, $4, $5)',
+          [
+            projectId,
+            encrypt(JSON.stringify(scenes)),
+            encrypt(JSON.stringify(scriptBlocks)),
+            encrypt(JSON.stringify(storyboardFrames)),
+            encrypt(JSON.stringify(sketches)),
+          ]
+        );
+        console.log('Restored Son of a Cobbler project in Postgres');
+      }
+    } else if (db) {
+      db.get('SELECT id FROM projects WHERE id = ?', [projectId], (err, row) => {
+        if (!row) {
+          db!.serialize(() => {
+            db!.run('INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)', [
+              projectId,
+              encryptedName,
+              now,
+              now,
+            ]);
+            db!.run(
+              'INSERT INTO project_data (project_id, scenes, script_blocks, storyboard_frames, sketches) VALUES (?, ?, ?, ?, ?)',
+              [
+                projectId,
+                encrypt(JSON.stringify(scenes)),
+                encrypt(JSON.stringify(scriptBlocks)),
+                encrypt(JSON.stringify(storyboardFrames)),
+                encrypt(JSON.stringify(sketches)),
+              ]
+            );
+          });
+          console.log('Restored Son of a Cobbler project in SQLite');
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Failed to ensure Son of a Cobbler project exists:', err);
+  }
+}
+
 export async function getProjectData(id: string): Promise<{
   scenes: Scene[];
   scriptBlocks: ScriptBlock[];
@@ -257,15 +431,11 @@ export async function getProjectData(id: string): Promise<{
     if (!row) {
       throw new Error('Project not found');
     }
-    try {
-      const scenes = JSON.parse(decrypt(row.scenes)) as Scene[];
-      const scriptBlocks = JSON.parse(decrypt(row.script_blocks)) as ScriptBlock[];
-      const storyboardFrames = JSON.parse(decrypt(row.storyboard_frames)) as StoryboardFrame[];
-      const sketches = JSON.parse(decrypt(row.sketches)) as Sketch[];
-      return { scenes, scriptBlocks, storyboardFrames, sketches };
-    } catch (err) {
-      throw err;
-    }
+    const scenes = safeParseJson<Scene[]>(row.scenes, []);
+    const scriptBlocks = safeParseJson<ScriptBlock[]>(row.script_blocks, []);
+    const storyboardFrames = safeParseJson<StoryboardFrame[]>(row.storyboard_frames, []);
+    const sketches = safeParseJson<Sketch[]>(row.sketches, []);
+    return { scenes, scriptBlocks, storyboardFrames, sketches };
   } else {
     return new Promise((resolve, reject) => {
       db!.get('SELECT * FROM project_data WHERE project_id = ?', [id], (err, row: any) => {
@@ -275,15 +445,11 @@ export async function getProjectData(id: string): Promise<{
         if (!row) {
           return reject(new Error('Project not found'));
         }
-        try {
-          const scenes = JSON.parse(decrypt(row.scenes)) as Scene[];
-          const scriptBlocks = JSON.parse(decrypt(row.script_blocks)) as ScriptBlock[];
-          const storyboardFrames = JSON.parse(decrypt(row.storyboard_frames)) as StoryboardFrame[];
-          const sketches = JSON.parse(decrypt(row.sketches)) as Sketch[];
-          resolve({ scenes, scriptBlocks, storyboardFrames, sketches });
-        } catch (err) {
-          reject(err);
-        }
+        const scenes = safeParseJson<Scene[]>(row.scenes, []);
+        const scriptBlocks = safeParseJson<ScriptBlock[]>(row.script_blocks, []);
+        const storyboardFrames = safeParseJson<StoryboardFrame[]>(row.storyboard_frames, []);
+        const sketches = safeParseJson<Sketch[]>(row.sketches, []);
+        resolve({ scenes, scriptBlocks, storyboardFrames, sketches });
       });
     });
   }

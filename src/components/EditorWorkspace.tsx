@@ -142,25 +142,7 @@ const BlockInput: React.FC<BlockInputProps> = ({
     }
   }, [isActive]);
 
-  // Combined character list
-  const combinedCharacters = useMemo(() => {
-    const bibleNames = (characters || []).map(c => c.name.trim().toUpperCase());
-    return Array.from(new Set([...existingCharacters, ...bibleNames]));
-  }, [existingCharacters, characters]);
-
-  // Compute character suggestion suffix
-  let suggestionSuffix = '';
-  if (type === 'character' && text.trim().length > 0) {
-    const upperText = text.toUpperCase();
-    const match = combinedCharacters.find(
-      char => char.startsWith(upperText) && char.length > upperText.length
-    );
-    if (match) {
-      suggestionSuffix = match.slice(upperText.length);
-    }
-  }
-
-  // Create unified autocomplete choices from story planner context
+  // Create unified autocomplete choices from story planner context for @ menu
   const allContextItems = useMemo(() => {
     const list: any[] = [];
     
@@ -275,20 +257,6 @@ const BlockInput: React.FC<BlockInputProps> = ({
       }
     }
 
-    if (suggestionSuffix && e.key === 'Enter') {
-      e.preventDefault();
-      const completedText = text + suggestionSuffix;
-      e.currentTarget.value = completedText;
-      e.currentTarget.selectionStart = completedText.length;
-      e.currentTarget.selectionEnd = completedText.length;
-      onChange(completedText);
-      setTimeout(() => {
-        adjustHeight();
-      }, 0);
-      onKeyDown(e);
-      return;
-    }
-
     onKeyDown(e);
   };
 
@@ -300,20 +268,6 @@ const BlockInput: React.FC<BlockInputProps> = ({
 
   return (
     <div className="relative w-full">
-      {suggestionSuffix && (
-        <div 
-          className={`${className} absolute inset-0 pointer-events-none select-none text-stone-400 font-mono text-[13px] overflow-hidden whitespace-pre-wrap flex items-center bg-transparent border-0 p-0 m-0 w-full z-0`}
-          style={{ minHeight: '1.5em' }}
-        >
-          {/* Invisible padding mapping exactly to the typed characters */}
-          <span className="text-transparent uppercase">{text}</span>
-          {/* Autocomplete prediction suffix */}
-          <span className="text-stone-400 uppercase font-mono">{suggestionSuffix}</span>
-          <span className="text-stone-300 text-[9px] font-sans ml-2 tracking-normal italic normal-case shrink-0">
-            [enter to confirm]
-          </span>
-        </div>
-      )}
       <textarea
         id={`textarea-${id}`}
         ref={textareaRef}
