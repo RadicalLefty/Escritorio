@@ -1960,6 +1960,42 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
     }
   };
 
+  const SceneTitleTextarea = ({ value, onChange }: { value: string; onChange: (val: string) => void }) => {
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const adjustHeight = () => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      }
+    };
+
+    useEffect(() => {
+      adjustHeight();
+    }, [value]);
+
+    return (
+      <textarea
+        ref={textareaRef}
+        rows={1}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          adjustHeight();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-transparent font-sans text-xs font-semibold uppercase tracking-wide focus:outline-none focus:bg-[#FAFAFA] border border-transparent rounded px-1 py-0.5 w-full text-[#2D2D2A] resize-none overflow-hidden block whitespace-pre-wrap break-words leading-snug"
+        style={{ minHeight: '1.5em' }}
+      />
+    );
+  };
+
   const renderSceneItem = (scene: Scene, currentActId: string | undefined) => {
     const globalNumber = sceneGlobalIndexMap[scene.id] || 1;
     const padNumber = globalNumber.toString().padStart(2, '0');
@@ -2029,41 +2065,18 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
             : 'hover:bg-white/50 border-transparent text-[#718096]'
         } ${dragOverId === scene.id ? 'border-dashed border-indigo-500 bg-indigo-50/50' : ''}`}
       >
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1.5 flex-grow min-w-0">
-            <span className="text-[10px] text-[#A0AEC0] font-mono shrink-0">{padNumber}</span>
-            <input
-              type="text"
+        <div className="flex items-start justify-between gap-1 w-full">
+          <div className="flex items-start gap-1.5 flex-grow min-w-0">
+            <span className="text-[10px] text-[#A0AEC0] font-mono shrink-0 pt-0.5">{padNumber}</span>
+            <SceneTitleTextarea
               value={scene.title}
-              onChange={(e) => handleRenameScene(scene.id, e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-transparent font-sans text-xs font-semibold uppercase tracking-wide focus:outline-none focus:bg-[#FAFAFA] border border-transparent rounded px-1 py-0.5 w-full text-[#2D2D2A]"
+              onChange={(val) => handleRenameScene(scene.id, val)}
             />
-          </div>
-
-          <div className="opacity-0 group-hover/scene:opacity-100 transition-opacity shrink-0 ml-1">
-            <select
-              value={scene.actId || ''}
-              onChange={(e) => {
-                e.stopPropagation();
-                handleSetSceneAct(scene.id, e.target.value || undefined);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="text-[10px] bg-white hover:bg-gray-50 border border-[#E5E5E1] text-[#718096] rounded px-1 py-0.5 cursor-pointer focus:outline-none max-w-[80px]"
-              title="Move Scene to Act"
-            >
-              <option value="">No Act</option>
-              {acts.map(act => (
-                <option key={act.id} value={act.id}>
-                  {act.title}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
-        <div className="opacity-0 group-hover/scene:opacity-100 flex items-center justify-between mt-1 pt-1 border-t border-[#E5E5E1]/40 transition-opacity">
-          <div className="flex items-center gap-0.5">
+        <div className="opacity-0 group-hover/scene:opacity-100 flex items-center justify-between mt-1.5 pt-1.5 border-t border-[#E5E5E1]/40 transition-opacity">
+          <div className="flex items-center gap-0.5 shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); handleMoveSceneInAct(scene.id, 'up'); }}
               disabled={siblingIndex === 0}
@@ -2082,13 +2095,33 @@ export default function EditorWorkspace({ projectId, projectName, onBack, onProj
             </button>
           </div>
 
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDeleteScene(scene.id); }}
-            className="p-0.5 hover:bg-[#FAFAFA] text-[#718096] hover:text-red-600 rounded cursor-pointer"
-            title="Delete Scene"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <select
+              value={scene.actId || ''}
+              onChange={(e) => {
+                e.stopPropagation();
+                handleSetSceneAct(scene.id, e.target.value || undefined);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] bg-white hover:bg-gray-50 border border-[#E5E5E1] text-[#718096] rounded px-1 py-0.5 cursor-pointer focus:outline-none max-w-[90px] truncate"
+              title="Move Scene to Act"
+            >
+              <option value="">No Act</option>
+              {acts.map(act => (
+                <option key={act.id} value={act.id}>
+                  {act.title}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteScene(scene.id); }}
+              className="p-0.5 hover:bg-[#FAFAFA] text-[#718096] hover:text-red-600 rounded cursor-pointer shrink-0"
+              title="Delete Scene"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     );
